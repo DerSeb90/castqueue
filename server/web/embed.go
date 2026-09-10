@@ -1,0 +1,18 @@
+// Package web embeds the static web UI.
+package web
+
+import (
+	"embed"
+	"io/fs"
+)
+
+//go:embed static
+var static embed.FS
+
+func FS() fs.FS {
+	sub, err := fs.Sub(static, "static")
+	if err != nil {
+		panic(err)
+	}
+	return sub
+}

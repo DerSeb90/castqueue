@@ -1,0 +1,285 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/sync_service.dart';
+import '../../downloads/download_manager.dart';
+import '../../playback/playback_controller.dart';
+import '../../state/app_state.dart';
+import '../../state/library.dart';
+import '../format.dart';
+import 'devices_screen.dart';
+
+class SettingsScreen extends ConsumerWidget {
+  const SettingsScreen({super.key});
+
+  Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Abmelden?'),
+        content: const Text('Der lokale Cache wird gelöscht. Fortschritt und Abos bleiben auf dem Server.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Abmelden')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(playbackControllerProvider.notifier).stop();
+    try {
+      await ref.read(apiClientProvider)?.logout();
+    } catch (_) {}
+    await ref.read(sessionProvider.notifier).clear();
+  }
+
+  Future<void> _addSonosHost(BuildContext context, WidgetRef ref) async {
+    final c = TextEditingController();
+    final host = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sonos-IP hinzufügen'),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'IP-Adresse', hintText: '192.168.1.50'),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Hinzufügen')),
+        ],
+      ),
+    );
+    if (host != null && host.isNotEmpty) await ref.read(appPrefsProvider.notifier).addSonosHost(host);
+  }
+
+  Future<void> _pickInterval(BuildContext context, WidgetRef ref, int current) async {
+    const options = [15, 30, 60, 120, 360];
+    final v = await showDialog<int>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Feed-Aktualisierung'),
+        children: [
+          RadioGroup<int>(
+            groupValue: current,
+            onChanged: (v) => Navigator.pop(ctx, v),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final o in options)
+                  RadioListTile<int>(
+                    value: o,
+                    title: Text(o < 60 ? 'alle $o Minuten' : 'alle ${o ~/ 60} Stunden'),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (v != null && context.mounted) {
+      await guarded(context, () => ref.read(libraryProvider.notifier).updateSettings(refreshIntervalMinutes: v));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionProvider);
+    final prefs = ref.watch(appPrefsProvider);
+    final lib = ref.watch(libraryProvider);
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+
+    Widget section(String title, List<Widget> children) => Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                child: Text(title.toUpperCase(),
+                    style: text.labelSmall?.copyWith(color: scheme.primary, letterSpacing: 1.2, fontWeight: FontWeight.w700)),
+              ),
+              Card(child: Column(children: children)),
+            ],
+          ),
+        );
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Einstellungen')),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 120),
+            children: [
+              section('Server', [
+                ListTile(
+                  leading: const Icon(Icons.dns_rounded),
+                  title: Text(session?.baseUrl ?? ''),
+                  subtitle: Text([
+                    if (session != null && session.username.isNotEmpty) session.username,
+                    if (session != null && session.deviceName.isNotEmpty) session.deviceName,
+                  ].join(' · ')),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.sync_rounded),
+                  title: const Text('Jetzt synchronisieren'),
+                  subtitle: Text(lib.lastSync == null ? 'Noch nie' : 'Zuletzt ${formatDateTime(lib.lastSync)}'),
+                  trailing: lib.syncing
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : null,
+                  onTap: () => ref.read(syncServiceProvider).syncNow(full: true),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.devices_rounded),
+                  title: const Text('Geräte verwalten'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const DevicesScreen())),
+                ),
+              ]),
+              section('Warteschlange & Feeds', [
+                SwitchListTile(
+                  secondary: const Icon(Icons.playlist_remove_rounded),
+                  title: const Text('Gehörte Folgen automatisch entfernen'),
+                  subtitle: const Text('Aus der Warteschlange, sobald eine Folge fertig ist'),
+                  value: lib.settings.autoRemovePlayed,
+                  onChanged: (v) =>
+                      guarded(context, () => ref.read(libraryProvider.notifier).updateSettings(autoRemovePlayed: v)),
+                ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.playlist_add_rounded),
+                  title: const Text('Neue Abos: Folgen automatisch einreihen'),
+                  subtitle: const Text('Standard für neu hinzugefügte Podcasts'),
+                  value: lib.settings.autoEnqueueDefault,
+                  onChanged: (v) =>
+                      guarded(context, () => ref.read(libraryProvider.notifier).updateSettings(autoEnqueueDefault: v)),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.schedule_rounded),
+                  title: const Text('Feed-Aktualisierung auf dem Server'),
+                  subtitle: Text(lib.settings.refreshIntervalMinutes < 60
+                      ? 'alle ${lib.settings.refreshIntervalMinutes} Minuten'
+                      : 'alle ${lib.settings.refreshIntervalMinutes ~/ 60} Stunden'),
+                  onTap: () => _pickInterval(context, ref, lib.settings.refreshIntervalMinutes),
+                ),
+              ]),
+              section('Wiedergabe', [
+                ListTile(
+                  leading: const Icon(Icons.speed_rounded),
+                  title: const Text('Standard-Geschwindigkeit'),
+                  subtitle: Text('${prefs.defaultSpeed.toStringAsFixed(2)}×'),
+                  trailing: SizedBox(
+                    width: 180,
+                    child: Slider(
+                      value: prefs.defaultSpeed.clamp(0.8, 2.0),
+                      min: 0.8,
+                      max: 2.0,
+                      divisions: 12,
+                      label: '${prefs.defaultSpeed.toStringAsFixed(1)}×',
+                      onChanged: (v) => ref.read(playbackControllerProvider.notifier).setSpeed((v * 10).round() / 10),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.dark_mode_rounded),
+                  title: const Text('Design'),
+                  trailing: SegmentedButton<ThemeMode>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(value: ThemeMode.dark, label: Text('Dunkel')),
+                      ButtonSegment(value: ThemeMode.light, label: Text('Hell')),
+                      ButtonSegment(value: ThemeMode.system, label: Text('System')),
+                    ],
+                    selected: {prefs.themeMode},
+                    onSelectionChanged: (s) => ref.read(appPrefsProvider.notifier).setThemeMode(s.first),
+                  ),
+                ),
+              ]),
+              section('Sonos', [
+                ListTile(
+                  leading: const Icon(Icons.speaker_group_rounded),
+                  title: const Text('Manuelle IP-Adressen'),
+                  subtitle: const Text('Falls die automatische Suche im LAN nichts findet'),
+                  trailing: IconButton(onPressed: () => _addSonosHost(context, ref), icon: const Icon(Icons.add_rounded)),
+                ),
+                for (final h in prefs.sonosHosts)
+                  ListTile(
+                    leading: const SizedBox(width: 24),
+                    title: Text(h),
+                    trailing: IconButton(
+                      onPressed: () => ref.read(appPrefsProvider.notifier).removeSonosHost(h),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ),
+              ]),
+              if (downloadsSupported)
+                section('Downloads', [
+                  SwitchListTile(
+                    secondary: const Icon(Icons.download_rounded),
+                    title: const Text('Warteschlange automatisch herunterladen'),
+                    value: prefs.autoDownload,
+                    onChanged: (v) async {
+                      await ref.read(appPrefsProvider.notifier).setAutoDownload(v);
+                      await ref.read(downloadManagerProvider.notifier).reconcile();
+                    },
+                  ),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.auto_delete_rounded),
+                    title: const Text('Downloads automatisch löschen'),
+                    subtitle: const Text('Wenn gehört oder aus der Warteschlange entfernt'),
+                    value: prefs.autoDeleteDownloads,
+                    onChanged: (v) => ref.read(appPrefsProvider.notifier).setAutoDeleteDownloads(v),
+                  ),
+                ]),
+              section('OPML', [
+                ListTile(
+                  leading: const Icon(Icons.file_download_outlined),
+                  title: const Text('Abos exportieren'),
+                  subtitle: Text('${session?.baseUrl ?? ''}/api/opml (im Browser, angemeldet)'),
+                  trailing: const Icon(Icons.copy_rounded),
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: '${session?.baseUrl ?? ''}/api/opml'));
+                    if (context.mounted) showSnack(context, 'URL kopiert');
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.file_upload_outlined),
+                  title: const Text('OPML importieren'),
+                  subtitle: const Text('OPML-Text aus der Zwischenablage einfügen'),
+                  onTap: () async {
+                    final data = await Clipboard.getData('text/plain');
+                    final xml = data?.text ?? '';
+                    if (!context.mounted) return;
+                    if (!xml.contains('<opml')) {
+                      showSnack(context, 'Kein OPML in der Zwischenablage', error: true);
+                      return;
+                    }
+                    final api = ref.read(apiClientProvider);
+                    if (api == null) return;
+                    await guarded(context, () async {
+                      final r = await api.importOpml(xml);
+                      await ref.read(syncServiceProvider).syncNow();
+                      if (context.mounted) {
+                        showSnack(context,
+                            '${r.added} hinzugefügt, ${r.skipped} übersprungen${r.failed.isEmpty ? '' : ', ${r.failed.length} fehlgeschlagen'}');
+                      }
+                    });
+                  },
+                ),
+              ]),
+              section('Konto', [
+                ListTile(
+                  leading: Icon(Icons.logout_rounded, color: scheme.error),
+                  title: Text('Abmelden', style: TextStyle(color: scheme.error)),
+                  onTap: () => _logout(context, ref),
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

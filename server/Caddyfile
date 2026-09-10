@@ -1,0 +1,12 @@
+{$CQ_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy castqueue:8080 {
+		# stream proxy: long-lived responses, don't buffer
+		flush_interval -1
+	}
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+}

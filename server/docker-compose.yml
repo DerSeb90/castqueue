@@ -1,0 +1,35 @@
+services:
+  castqueue:
+    build: .
+    image: castqueue:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CQ_DATA_DIR: /data
+      CQ_LISTEN: ":8080"
+    volumes:
+      - ./data:/data
+    # Only reachable through Caddy; no host port published.
+    networks: [web]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    env_file: .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [web]
+    depends_on: [castqueue]
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  web:

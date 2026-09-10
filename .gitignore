@@ -1,0 +1,25 @@
+# server
+server/data/
+server/.env
+server/castqueue
+server/castqueue.exe
+
+# flutter / dart
+app/.dart_tool/
+app/.idea/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/*.iml
+app/android/.gradle/
+app/android/local.properties
+app/android/key.properties
+app/android/app/.cxx/
+app/windows/flutter/ephemeral/
+app/windows/flutter/generated_plugin_registrant.*
+app/windows/flutter/generated_plugins.cmake
+
+# misc
+.DS_Store
+Thumbs.db
+*.log
