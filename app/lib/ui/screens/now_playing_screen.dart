@@ -154,6 +154,37 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   icon: Icon(s.isSonos ? Icons.speaker_rounded : Icons.devices_rounded, size: 18),
                   label: Text(s.targetName),
                 ),
+                if (s.targetSupportsVolume) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: s.volume == 0 ? 'Ton an' : 'Stumm',
+                        onPressed: () => ctl.setVolume(s.volume == 0 ? 0.5 : 0),
+                        icon: Icon(
+                          s.volume == 0
+                              ? Icons.volume_off_rounded
+                              : s.volume < 0.5
+                                  ? Icons.volume_down_rounded
+                                  : Icons.volume_up_rounded,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: s.volume.clamp(0.0, 1.0),
+                          onChanged: (v) => ctl.setVolume(v),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 40,
+                        child: Text('${(s.volume * 100).round()}%',
+                            textAlign: TextAlign.end,
+                            style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                      ),
+                    ],
+                  ),
+                ],
                 if (s.status.state == PlaybackState.error && s.error != null) ...[
                   const SizedBox(height: 12),
                   Text(s.error!, style: text.bodySmall?.copyWith(color: scheme.error), textAlign: TextAlign.center),

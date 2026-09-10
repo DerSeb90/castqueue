@@ -133,6 +133,15 @@ class LocalTarget implements PlaybackTarget {
   Future<void> setSpeed(double speed) => _player.setSpeed(speed);
 
   @override
+  bool get supportsVolume => true;
+
+  @override
+  Future<void> setVolume(double volume) => _player.setVolume(volume.clamp(0.0, 1.0));
+
+  @override
+  Future<double?> readVolume() async => _player.volume;
+
+  @override
   Future<void> setNext(PlayItem? item) async {
     // just_audio has no single-track "next" hint; the controller handles
     // advancing on completion. Kept for interface parity.

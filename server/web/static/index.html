@@ -25,29 +25,6 @@
     </div>
   </aside>
   <main class="main" id="main"></main>
-  <div class="player hidden" id="player">
-    <img class="player-art" id="player-art" alt="">
-    <div class="player-info">
-      <div class="player-title" id="player-title"></div>
-      <div class="player-sub" id="player-sub"></div>
-      <div class="player-bar">
-        <span class="time" id="player-pos">0:00</span>
-        <input type="range" id="player-seek" min="0" max="1000" value="0">
-        <span class="time" id="player-dur">0:00</span>
-      </div>
-    </div>
-    <div class="player-controls">
-      <button class="btn icon" id="btn-back" title="10 s zurück">↺</button>
-      <button class="btn icon primary big" id="btn-play" title="Abspielen / Pause">▶</button>
-      <button class="btn icon" id="btn-fwd" title="30 s vor">↻</button>
-      <button class="btn icon" id="btn-next" title="Nächste in Warteschlange">⏭</button>
-      <select id="player-speed" title="Geschwindigkeit">
-        <option value="0.8">0,8×</option><option value="1" selected>1×</option><option value="1.2">1,2×</option>
-        <option value="1.5">1,5×</option><option value="1.8">1,8×</option><option value="2">2×</option>
-      </select>
-    </div>
-    <audio id="audio" preload="none"></audio>
-  </div>
   <div class="toast hidden" id="toast"></div>
 </div>
 <div id="login" class="login hidden">

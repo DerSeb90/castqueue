@@ -68,5 +68,5 @@ mit Range-Support, damit Sonos und beide Apps ohne Header-Auth streamen können.
 - `github.com/mmcdole/gofeed` für RSS/Atom/iTunes-Tags.
 - Refresh-Loop im Hintergrund (Intervall aus Settings), zusätzlich manuell.
 - Auth: ein Benutzer aus Env, Bearer-Tokens pro Gerät (SHA-256 gehasht in DB), Login-Rate-Limit.
-- Web-UI: eingebettet, Hash-Routing, nutzt dieselbe API mit Cookie.
+- Web-UI: eingebettet, Hash-Routing, nutzt dieselbe API mit Cookie. Reine Verwaltung (Abos, Warteschlange, Gehört-Status, Geräte), keine Wiedergabe.
 - Deployment: `docker compose up -d` mit Caddy (automatisches TLS) vor dem Server.

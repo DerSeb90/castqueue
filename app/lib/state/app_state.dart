@@ -55,6 +55,7 @@ class AppPrefs {
   const AppPrefs({
     this.themeMode = ThemeMode.dark,
     this.defaultSpeed = 1.0,
+    this.localVolume = 1.0,
     this.sonosHosts = const [],
     this.autoDownload = false,
     this.autoDeleteDownloads = true,
@@ -64,6 +65,7 @@ class AppPrefs {
 
   final ThemeMode themeMode;
   final double defaultSpeed;
+  final double localVolume;
   final List<String> sonosHosts;
   final bool autoDownload;
   final bool autoDeleteDownloads;
@@ -73,6 +75,7 @@ class AppPrefs {
   AppPrefs copyWith({
     ThemeMode? themeMode,
     double? defaultSpeed,
+    double? localVolume,
     List<String>? sonosHosts,
     bool? autoDownload,
     bool? autoDeleteDownloads,
@@ -82,6 +85,7 @@ class AppPrefs {
       AppPrefs(
         themeMode: themeMode ?? this.themeMode,
         defaultSpeed: defaultSpeed ?? this.defaultSpeed,
+        localVolume: localVolume ?? this.localVolume,
         sonosHosts: sonosHosts ?? this.sonosHosts,
         autoDownload: autoDownload ?? this.autoDownload,
         autoDeleteDownloads: autoDeleteDownloads ?? this.autoDeleteDownloads,
@@ -93,6 +97,7 @@ class AppPrefs {
 class AppPrefsNotifier extends Notifier<AppPrefs> {
   static const _kTheme = 'prefs.theme';
   static const _kSpeed = 'prefs.speed';
+  static const _kVolume = 'prefs.volume';
   static const _kSonos = 'prefs.sonos_hosts';
   static const _kAutoDl = 'prefs.auto_download';
   static const _kAutoDel = 'prefs.auto_delete_downloads';
@@ -109,6 +114,7 @@ class AppPrefsNotifier extends Notifier<AppPrefs> {
         _ => ThemeMode.dark,
       },
       defaultSpeed: p.getDouble(_kSpeed) ?? 1.0,
+      localVolume: p.getDouble(_kVolume) ?? 1.0,
       sonosHosts: p.getStringList(_kSonos) ?? const [],
       autoDownload: p.getBool(_kAutoDl) ?? false,
       autoDeleteDownloads: p.getBool(_kAutoDel) ?? true,
@@ -123,6 +129,11 @@ class AppPrefsNotifier extends Notifier<AppPrefs> {
   Future<void> setDefaultSpeed(double s) async {
     await _p.setDouble(_kSpeed, s);
     state = state.copyWith(defaultSpeed: s);
+  }
+
+  Future<void> setLocalVolume(double v) async {
+    await _p.setDouble(_kVolume, v);
+    state = state.copyWith(localVolume: v);
   }
 
   Future<void> addSonosHost(String host) async {

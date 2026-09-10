@@ -139,6 +139,41 @@ class SonosTarget implements PlaybackTarget {
   }
 
   @override
+  bool get supportsVolume => true;
+
+  static const _renderingControlPath = '/MediaRenderer/RenderingControl/Control';
+  static const _renderingControlService = 'urn:schemas-upnp-org:service:RenderingControl:1';
+
+  @override
+  Future<void> setVolume(double volume) async {
+    _ensureAlive();
+    final v = (volume.clamp(0.0, 1.0) * 100).round();
+    await _soap.call(
+      controlPath: _renderingControlPath,
+      serviceType: _renderingControlService,
+      action: 'SetVolume',
+      args: {'InstanceID': '0', 'Channel': 'Master', 'DesiredVolume': '$v'},
+    );
+  }
+
+  @override
+  Future<double?> readVolume() async {
+    _ensureAlive();
+    try {
+      final res = await _soap.call(
+        controlPath: _renderingControlPath,
+        serviceType: _renderingControlService,
+        action: 'GetVolume',
+        args: {'InstanceID': '0', 'Channel': 'Master'},
+      );
+      final v = int.tryParse(res['CurrentVolume'] ?? '');
+      return v == null ? null : v / 100;
+    } on SonosException {
+      return null;
+    }
+  }
+
+  @override
   Future<void> setNext(PlayItem? item) async {
     _ensureAlive();
     _next = item;

@@ -5,7 +5,7 @@ Warteschlange**, synchronisiert zwischen Windows, Android, Web und Sonos.
 
 | Teil | Was |
 |---|---|
-| `server/` | Go-API + Feed-Refresh + Stream-Proxy für Premium-Feeds + eingebettete Web-UI. SQLite, Docker, Caddy (TLS). |
+| `server/` | Go-API + Feed-Refresh + Stream-Proxy für Premium-Feeds + eingebettete Web-UI (reine Verwaltung: Abos, Warteschlange, Gehört-Status, Geräte; keine Wiedergabe). SQLite, Docker, Caddy (TLS). |
 | `app/` | Flutter-App für **Windows** (Stream only) und **Android** (mit Downloads). Sonos-Wiedergabe im LAN. |
 | `docs/` | [API-Vertrag](docs/API.md), [Architektur](docs/ARCHITECTURE.md). |
 
@@ -19,7 +19,7 @@ docker compose up -d --build
 ```
 
 Caddy holt automatisch ein Let's-Encrypt-Zertifikat für `CQ_DOMAIN` (Port 80/443 müssen offen sein,
-DNS-A-Record auf den Server). Danach: `https://<domain>` → Web-UI-Login.
+DNS-A-Record auf den Server). Danach: `https://<domain>` → Web-UI-Login. Abspielen passiert nur in den Apps, die Web-UI verwaltet Abos und Warteschlange zentral.
 
 - Datenbank liegt in `server/data/castqueue.db` (Backup: Datei kopieren, WAL-Dateien mitnehmen).
 - Nur ein Benutzer (aus `.env`). Jeder Login erzeugt ein Geräte-Token; Geräte lassen sich in den

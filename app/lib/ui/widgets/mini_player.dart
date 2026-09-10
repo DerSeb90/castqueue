@@ -87,6 +87,33 @@ class MiniPlayer extends ConsumerWidget {
                     onPressed: ctl.skipForward,
                     icon: const Icon(Icons.forward_30_rounded),
                   ),
+                  if (s.targetSupportsVolume && MediaQuery.sizeOf(context).width >= 800) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      s.volume == 0
+                          ? Icons.volume_off_rounded
+                          : s.volume < 0.5
+                              ? Icons.volume_down_rounded
+                              : Icons.volume_up_rounded,
+                      size: 20,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    SizedBox(
+                      width: 140,
+                      child: SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 2,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                        ),
+                        child: Slider(
+                          value: s.volume.clamp(0.0, 1.0),
+                          onChanged: (v) => ctl.setVolume(v),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                 ],
               ),
             ),

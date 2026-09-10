@@ -19,7 +19,9 @@ class PlaybackUiState {
     this.targetId = 'local',
     this.targetName = '',
     this.targetSupportsSpeed = true,
+    this.targetSupportsVolume = true,
     this.speed = 1.0,
+    this.volume = 1.0,
     this.sonosDevices = const [],
     this.discovering = false,
     this.error,
@@ -30,7 +32,9 @@ class PlaybackUiState {
   final String targetId;
   final String targetName;
   final bool targetSupportsSpeed;
+  final bool targetSupportsVolume;
   final double speed;
+  final double volume;
   final List<SonosDevice> sonosDevices;
   final bool discovering;
   final String? error;
@@ -54,7 +58,9 @@ class PlaybackUiState {
     String? targetId,
     String? targetName,
     bool? targetSupportsSpeed,
+    bool? targetSupportsVolume,
     double? speed,
+    double? volume,
     List<SonosDevice>? sonosDevices,
     bool? discovering,
     String? error,
@@ -66,7 +72,9 @@ class PlaybackUiState {
         targetId: targetId ?? this.targetId,
         targetName: targetName ?? this.targetName,
         targetSupportsSpeed: targetSupportsSpeed ?? this.targetSupportsSpeed,
+        targetSupportsVolume: targetSupportsVolume ?? this.targetSupportsVolume,
         speed: speed ?? this.speed,
+        volume: volume ?? this.volume,
         sonosDevices: sonosDevices ?? this.sonosDevices,
         discovering: discovering ?? this.discovering,
         error: clearError ? null : (error ?? this.error),
@@ -99,9 +107,12 @@ class PlaybackController extends Notifier<PlaybackUiState> {
       if (!identical(_target, _local)) unawaited(_target.dispose());
       unawaited(_local.dispose());
     });
-    final speed = ref.read(appPrefsProvider).defaultSpeed;
+    final prefs = ref.read(appPrefsProvider);
+    final speed = prefs.defaultSpeed;
+    final volume = prefs.localVolume.clamp(0.0, 1.0);
     unawaited(_local.setSpeed(speed));
-    return PlaybackUiState(targetId: _local.id, targetName: _local.name, speed: speed);
+    unawaited(_local.setVolume(volume));
+    return PlaybackUiState(targetId: _local.id, targetName: _local.name, speed: speed, volume: volume);
   }
 
   LibraryNotifier get _lib => ref.read(libraryProvider.notifier);
@@ -261,6 +272,29 @@ class PlaybackController extends Notifier<PlaybackUiState> {
     if (_target.supportsSpeed) await _target.setSpeed(s);
   }
 
+  Future<void> setVolume(double volume) async {
+    final v = volume.clamp(0.0, 1.0);
+    state = state.copyWith(volume: v);
+    if (identical(_target, _local)) {
+      await ref.read(appPrefsProvider.notifier).setLocalVolume(v);
+    }
+    if (_target.supportsVolume) {
+      try {
+        await _target.setVolume(v);
+      } catch (e) {
+        state = state.copyWith(error: 'Lautstärke fehlgeschlagen: $e');
+      }
+    }
+  }
+
+  Future<void> _refreshVolume() async {
+    if (!_target.supportsVolume) return;
+    try {
+      final v = await _target.readVolume();
+      if (v != null) state = state.copyWith(volume: v);
+    } catch (_) {}
+  }
+
   Future<void> _onCompleted(Episode ep) async {
     if (_handlingCompletion) return;
     _handlingCompletion = true;
@@ -352,9 +386,15 @@ class PlaybackController extends Notifier<PlaybackUiState> {
       targetId: t.id,
       targetName: t.name,
       targetSupportsSpeed: t.supportsSpeed,
+      targetSupportsVolume: t.supportsVolume,
       status: PlaybackStatus.idle,
       clearError: true,
     );
+    if (identical(t, _local)) {
+      state = state.copyWith(volume: ref.read(appPrefsProvider).localVolume);
+    } else {
+      unawaited(_refreshVolume());
+    }
     if (ep != null && wasActive) {
       _completedFor = null;
       try {

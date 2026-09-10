@@ -108,6 +108,14 @@ abstract class PlaybackTarget {
   /// No-op when [supportsSpeed] is false.
   Future<void> setSpeed(double speed);
 
+  bool get supportsVolume;
+
+  /// Volume 0.0–1.0. For Sonos this is the speaker/group volume.
+  Future<void> setVolume(double volume);
+
+  /// Current volume 0.0–1.0, `null` if the target cannot report it.
+  Future<double?> readVolume();
+
   /// Optional gapless hint for the next queue item. Targets that cannot
   /// pre-queue may ignore it. Pass `null` to clear.
   Future<void> setNext(PlayItem? item);

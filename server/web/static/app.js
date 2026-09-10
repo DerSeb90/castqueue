@@ -1,4 +1,4 @@
-/* CastQueue web UI – vanilla JS, hash routing, same API as the apps. */
+/* CastQueue web UI – management only (subscriptions, queue, progress); playback happens in the apps. */
 (() => {
   'use strict';
 
@@ -88,67 +88,6 @@
     catch (e) { toast(e.message, true); } finally { ev.target.disabled = false; }
   });
 
-  // ---------- player ----------
-  const audio = $('#audio');
-  const P = { ep: null, reportTimer: null, lastReport: 0, seeking: false };
-  const playerEls = { art: $('#player-art'), title: $('#player-title'), sub: $('#player-sub'), pos: $('#player-pos'), dur: $('#player-dur'), seek: $('#player-seek'), play: $('#btn-play') };
-
-  function playEpisode(ep, { fromStart = false } = {}) {
-    if (P.ep && P.ep.id !== ep.id) reportProgress(true);
-    P.ep = ep;
-    $('#player').classList.remove('hidden');
-    playerEls.art.src = ep.image_url || ep.podcast_image_url || '';
-    playerEls.title.textContent = ep.title; playerEls.sub.textContent = ep.podcast_title;
-    audio.src = ep.stream_url;
-    audio.playbackRate = parseFloat($('#player-speed').value);
-    const start = fromStart ? 0 : Math.max(0, (ep.position_ms || 0) - 3000) / 1000;
-    audio.currentTime = 0;
-    audio.play().then(() => { if (start > 0) audio.currentTime = start; }).catch(e => toast('Wiedergabe fehlgeschlagen: ' + e.message, true));
-    if (!ep.in_queue) api('POST', '/api/queue/items', { episode_id: ep.id, position: 'front' }).then(reloadQueue).catch(() => {});
-    render();
-  }
-  async function reportProgress(force, played) {
-    if (!P.ep) return;
-    const now = Date.now();
-    if (!force && now - P.lastReport < 10000) return;
-    P.lastReport = now;
-    const body = { position_ms: Math.floor(audio.currentTime * 1000), updated_at: new Date().toISOString() };
-    if (isFinite(audio.duration) && audio.duration > 0) body.duration_ms = Math.floor(audio.duration * 1000);
-    if (played !== undefined) body.played = played;
-    try {
-      const ep = await api('PUT', `/api/episodes/${P.ep.id}/progress`, body);
-      S.episodes.set(ep.id, ep);
-      if (P.ep && P.ep.id === ep.id) Object.assign(P.ep, ep);
-    } catch (_) { /* retried on next tick */ }
-  }
-  audio.addEventListener('timeupdate', () => {
-    if (!P.ep) return;
-    if (!P.seeking && isFinite(audio.duration)) playerEls.seek.value = Math.floor(audio.currentTime / audio.duration * 1000);
-    playerEls.pos.textContent = fmtTime(audio.currentTime * 1000);
-    playerEls.dur.textContent = fmtTime((isFinite(audio.duration) ? audio.duration : (P.ep.duration_ms || 0) / 1000) * 1000);
-    reportProgress(false);
-  });
-  audio.addEventListener('play', () => { playerEls.play.textContent = '❚❚'; });
-  audio.addEventListener('pause', () => { playerEls.play.textContent = '▶'; reportProgress(true); });
-  audio.addEventListener('ended', async () => {
-    const finished = P.ep;
-    await reportProgress(true, true);
-    const q = await api('GET', '/api/queue').catch(() => null);
-    if (q) await reloadQueue(q);
-    const next = S.queue.items.find(e => e.id !== finished.id && !e.played);
-    if (next) playEpisode(next); else { P.ep = null; $('#player').classList.add('hidden'); render(); }
-  });
-  playerEls.play.addEventListener('click', () => { if (!P.ep) { if (S.queue.items[0]) playEpisode(S.queue.items[0]); return; } audio.paused ? audio.play() : audio.pause(); });
-  $('#btn-back').addEventListener('click', () => { audio.currentTime = Math.max(0, audio.currentTime - 10); reportProgress(true); });
-  $('#btn-fwd').addEventListener('click', () => { audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 30); reportProgress(true); });
-  $('#btn-next').addEventListener('click', () => { const next = S.queue.items.find(e => !P.ep || e.id !== P.ep.id); if (next) playEpisode(next); });
-  $('#player-speed').addEventListener('change', (e) => { audio.playbackRate = parseFloat(e.target.value); localStorage.setItem('cq_speed', e.target.value); });
-  $('#player-speed').value = localStorage.getItem('cq_speed') || '1';
-  playerEls.seek.addEventListener('input', () => { P.seeking = true; playerEls.pos.textContent = fmtTime(playerEls.seek.value / 1000 * (audio.duration || 0) * 1000); });
-  playerEls.seek.addEventListener('change', () => { if (isFinite(audio.duration)) audio.currentTime = playerEls.seek.value / 1000 * audio.duration; P.seeking = false; reportProgress(true); });
-  window.addEventListener('beforeunload', () => { if (P.ep && !audio.paused) navigator.sendBeacon && reportProgress(true); });
-  document.addEventListener('keydown', (e) => { if (e.code === 'Space' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) { e.preventDefault(); playerEls.play.click(); } });
-
   // ---------- episode actions ----------
   async function queueAdd(ep, position) {
     try { await reloadQueue(await api('POST', '/api/queue/items', { episode_id: ep.id, position }), { rerender: false }); ep.in_queue = true; toast('Zur Warteschlange hinzugefügt'); render(); } catch (e) { toast(e.message, true); }
@@ -165,11 +104,9 @@
   }
 
   function episodeRow(ep, opts = {}) {
-    const isPlaying = P.ep && P.ep.id === ep.id;
     const pct = ep.duration_ms ? Math.min(100, ep.position_ms / ep.duration_ms * 100) : 0;
     const pod = podcastById(ep.podcast_id);
     const actions = [];
-    actions.push(el('button', { class: 'btn icon', title: 'Abspielen', onclick: () => playEpisode(ep) }, isPlaying && !audio.paused ? '❚❚' : '▶'));
     if (ep.in_queue) actions.push(el('button', { class: 'btn icon', title: 'Aus Warteschlange entfernen', onclick: () => queueRemove(ep) }, '✕'));
     else {
       actions.push(el('button', { class: 'btn icon', title: 'Als Nächstes', onclick: () => queueAdd(ep, 'front') }, '⤒'));
@@ -178,7 +115,7 @@
     actions.push(el('button', { class: 'btn icon', title: ep.played ? 'Als ungehört markieren' : 'Als gehört markieren', onclick: () => markPlayed(ep, !ep.played) }, ep.played ? '↶' : '✓'));
     const meta = [fmtDate(ep.published_at)];
     if (ep.duration_ms) meta.push(ep.position_ms > 0 && !ep.played ? `noch ${fmtTime(ep.duration_ms - ep.position_ms)}` : fmtTime(ep.duration_ms));
-    const row = el('div', { class: 'ep' + (isPlaying ? ' playing' : '') + (ep.played ? ' played' : ''), 'data-id': ep.id },
+    const row = el('div', { class: 'ep' + (ep.played ? ' played' : ''), 'data-id': ep.id },
       el('img', { class: 'ep-art', src: ep.image_url || ep.podcast_image_url || '', loading: 'lazy', alt: '' }),
       el('div', { class: 'ep-body' },
         el('div', { class: 'ep-title', onclick: () => go('#/episode/' + ep.id) }, ep.title),
@@ -260,7 +197,7 @@
           p.website ? el('a', { class: 'btn small ghost', href: p.website, target: '_blank', rel: 'noopener' }, 'Website ↗') : null,
           el('button', { class: 'btn small danger', onclick: async () => {
             if (!confirm(`„${p.title}“ deabonnieren? Alle Folgen werden auch aus der Warteschlange entfernt.`)) return;
-            try { await api('DELETE', `/api/podcasts/${id}`); if (P.ep && P.ep.podcast_id === id) { audio.pause(); P.ep = null; $('#player').classList.add('hidden'); } toast('Deabonniert'); await loadCore(); go('#/podcasts'); } catch (err) { toast(err.message, true); }
+            try { await api('DELETE', `/api/podcasts/${id}`); toast('Deabonniert'); await loadCore(); go('#/podcasts'); } catch (err) { toast(err.message, true); }
           } }, 'Deabonnieren')))));
     const list = el('div', { class: 'ep-list' });
     main.append(el('h2', {}, 'Folgen'), list);
