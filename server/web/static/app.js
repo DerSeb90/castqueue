@@ -63,10 +63,10 @@
     S.podcasts = podcasts; S.queue = queue; S.settings = settings; S.me = me; rememberEpisodes(queue.items);
     $('#queue-count').textContent = queue.items.length || '';
   }
-  async function reloadQueue(q) {
+  async function reloadQueue(q, { rerender = true } = {}) {
     S.queue = q || await api('GET', '/api/queue'); rememberEpisodes(S.queue.items);
     $('#queue-count').textContent = S.queue.items.length || '';
-    if (route.name === 'queue') render();
+    if (rerender && route.name === 'queue') render();
   }
 
   // ---------- login ----------
@@ -151,16 +151,16 @@
 
   // ---------- episode actions ----------
   async function queueAdd(ep, position) {
-    try { await reloadQueue(await api('POST', '/api/queue/items', { episode_id: ep.id, position })); ep.in_queue = true; toast('Zur Warteschlange hinzugefügt'); render(); } catch (e) { toast(e.message, true); }
+    try { await reloadQueue(await api('POST', '/api/queue/items', { episode_id: ep.id, position }), { rerender: false }); ep.in_queue = true; toast('Zur Warteschlange hinzugefügt'); render(); } catch (e) { toast(e.message, true); }
   }
   async function queueRemove(ep) {
-    try { await reloadQueue(await api('DELETE', `/api/queue/items/${ep.id}`)); ep.in_queue = false; render(); } catch (e) { toast(e.message, true); }
+    try { await reloadQueue(await api('DELETE', `/api/queue/items/${ep.id}`), { rerender: false }); ep.in_queue = false; render(); } catch (e) { toast(e.message, true); }
   }
   async function markPlayed(ep, played) {
     try {
       const updated = await api('PUT', `/api/episodes/${ep.id}/progress`, { position_ms: played ? (ep.duration_ms || 0) : 0, played, updated_at: new Date().toISOString() });
       S.episodes.set(updated.id, updated); Object.assign(ep, updated);
-      await reloadQueue(); render();
+      await reloadQueue(undefined, { rerender: false }); render();
     } catch (e) { toast(e.message, true); }
   }
 
@@ -196,7 +196,7 @@
   const views = {};
 
   views.queue = async (main) => {
-    await reloadQueue();
+    await reloadQueue(undefined, { rerender: false });
     main.append(el('h1', {}, 'Warteschlange', el('span', { class: 'sub' }, `${S.queue.items.length} Folgen · ${fmtTime(S.queue.items.reduce((a, e) => a + Math.max(0, (e.duration_ms || 0) - (e.position_ms || 0)), 0))}`),
       el('span', { class: 'spacer' }),
       S.queue.items.length ? el('button', { class: 'btn small danger', onclick: async () => { if (confirm('Warteschlange leeren?')) await reloadQueue(await api('DELETE', '/api/queue')); } }, 'Leeren') : null));
