@@ -1,0 +1,43 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Server (Go)",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/server/cmd/castqueue",
+      "cwd": "${workspaceFolder}/server",
+      "env": {
+        "CQ_USERNAME": "seb",
+        "CQ_PASSWORD": "test",
+        "CQ_DATA_DIR": "${workspaceFolder}/server/data",
+        "CQ_LISTEN": ":8080",
+        "CQ_PUBLIC_URL": "http://localhost:8080",
+        "CQ_LOG_LEVEL": "debug"
+      }
+    },
+    {
+      "name": "App (Windows)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "cwd": "${workspaceFolder}/app",
+      "deviceId": "windows"
+    },
+    {
+      "name": "App (Android)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "cwd": "${workspaceFolder}/app"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Server + App (Windows)",
+      "configurations": ["Server (Go)", "App (Windows)"],
+      "stopAll": true
+    }
+  ]
+}
