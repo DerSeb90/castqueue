@@ -67,6 +67,28 @@ und synchronisiert alle 30 s bzw. nach jeder Aktion.
 - Android: Downloads (manuell oder automatisch für Queue-Einträge), Benachrichtigung/Lockscreen,
   Headset-Tasten. Windows: nur Streaming.
 
+## Releases
+
+Ein Git-Tag `vX.Y.Z` löst zwei Workflows aus, die beide an dasselbe GitHub-Release hängen
+(wer zuerst fertig ist, legt es an):
+
+- `android-app.yml` → signierte APKs pro ABI (`app-arm64-v8a-release.apk`, …)
+- `windows-app.yml` → `CastQueue-Setup-X.Y.Z.exe` (Inno Setup, Installation pro Benutzer nach
+  `%LOCALAPPDATA%\Programs\CastQueue`, kein Admin nötig)
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+Beide Apps prüfen unter *Einstellungen → App → Nach Updates suchen* das neueste Release, laden
+das passende Asset, prüfen die von GitHub veröffentlichte SHA-256-Prüfsumme und installieren:
+Android über den Paket-Installer, Windows still per Setup (`/VERYSILENT`); die App beendet sich
+dafür und wird vom Setup neu gestartet. Ein manueller Lauf über *workflow_dispatch* baut nur
+Artefakte, kein Release.
+
+Das Server-Image baut `server-image.yml` ebenfalls pro Tag (oder manuell); `latest` zeigt auf
+den neuesten Tag.
+
 ## Sicherheit
 
 Der Server ist für genau eine Person gedacht. Alles außer Login, Health und dem Stream-Proxy

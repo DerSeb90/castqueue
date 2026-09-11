@@ -10,7 +10,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Where the app is published. The releases of this repository carry one
-/// signed APK per ABI, and GitHub records a SHA-256 digest for each asset.
+/// signed APK per ABI plus a Windows setup, and GitHub records a SHA-256
+/// digest for each asset.
 const String kUpdateRepository = 'DerSeb90/castqueue';
 
 /// Names the Flutter build gives its release APKs: `app-<abi>-release.apk`
@@ -19,6 +20,13 @@ const String kUpdateRepository = 'DerSeb90/castqueue';
 final RegExp kReleaseApkName = RegExp(
   r'^app-(?:(arm64-v8a|armeabi-v7a|x86_64|x86)-)?release\.apk$',
 );
+
+/// Name of the Windows installer built by the windows-app workflow
+/// (Inno Setup, `CastQueue-Setup-<version>.exe`).
+final RegExp kReleaseSetupName = RegExp(r'^CastQueue-Setup-.*\.exe$');
+
+/// The pseudo-ABI that selects the Windows installer instead of an APK.
+const String kWindowsAbi = 'windows';
 
 enum AppUpdateStatus { available, current, error }
 
@@ -78,8 +86,8 @@ class AppUpdateInfo {
   final AppVersion version;
   final String tag;
 
-  /// Null when the release carries no APK for this platform (e.g. on
-  /// Windows); the release page can still be opened.
+  /// Null when the release carries no installable asset for this platform;
+  /// the release page can still be opened.
   final Uri? apkUrl;
   final String apkName;
   final String sha256;
@@ -90,13 +98,15 @@ class AppUpdateInfo {
 
   bool get installable => apkUrl != null && sha256.isNotEmpty && size > 0;
 
-  /// Reads one entry of the GitHub releases API and picks the APK built for
-  /// [abi] (`arm64-v8a`, `armeabi-v7a`, `x86_64`). A universal
-  /// `app-release.apk` is taken when no split one matches. Assets that are not
-  /// named like this app's builds are ignored, see [kReleaseApkName].
+  /// Reads one entry of the GitHub releases API and picks the asset for
+  /// [abi]: on Android the APK built for `arm64-v8a`, `armeabi-v7a` or
+  /// `x86_64` (a universal `app-release.apk` is taken when no split one
+  /// matches); with [kWindowsAbi] the Windows setup exe. Assets that are not
+  /// named like this app's builds are ignored, see [kReleaseApkName] and
+  /// [kReleaseSetupName].
   ///
-  /// With [requireApk] false (non-Android) a release without a usable APK is
-  /// still returned, just not installable.
+  /// With [requireApk] false a release without a usable asset is still
+  /// returned, just not installable.
   factory AppUpdateInfo.fromRelease(Map<String, dynamic> json, String abi, {bool requireApk = true}) {
     final tag = json['tag_name']?.toString().trim() ?? '';
     final version = AppVersion.tryParse(tag);
@@ -107,12 +117,17 @@ class AppUpdateInfo {
     final releaseUrl = Uri.tryParse(json['html_url']?.toString() ?? '');
     final date = DateTime.tryParse(json['published_at']?.toString() ?? '');
 
+    final windows = abi == kWindowsAbi;
+    final pattern = windows ? kReleaseSetupName : kReleaseApkName;
+    final what = windows ? 'Windows-Setup' : 'APK';
     final assets = (json['assets'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
-        .where((a) => kReleaseApkName.hasMatch(a['name']?.toString() ?? ''))
+        .where((a) => pattern.hasMatch(a['name']?.toString() ?? ''))
         .toList(growable: false);
     if (assets.isEmpty) {
-      if (requireApk) throw const FormatException('Das Release enthält keine CastQueue-APK.');
+      if (requireApk) {
+        throw FormatException(windows ? 'Das Release enthält kein CastQueue-Setup.' : 'Das Release enthält keine CastQueue-APK.');
+      }
       return AppUpdateInfo(
         version: version,
         tag: tag,
@@ -125,22 +140,24 @@ class AppUpdateInfo {
         date: date,
       );
     }
-    final asset = assets.firstWhere(
-      (a) => a['name'].toString() == 'app-$abi-release.apk',
-      orElse: () => assets.firstWhere(
-        (a) => a['name'].toString() == 'app-release.apk',
-        orElse: () => throw FormatException('Keine APK für $abi im Release.'),
-      ),
-    );
+    final asset = windows
+        ? assets.first
+        : assets.firstWhere(
+            (a) => a['name'].toString() == 'app-$abi-release.apk',
+            orElse: () => assets.firstWhere(
+              (a) => a['name'].toString() == 'app-release.apk',
+              orElse: () => throw FormatException('Keine APK für $abi im Release.'),
+            ),
+          );
     final digest = asset['digest']?.toString().trim().toLowerCase() ?? '';
     final hash = digest.startsWith('sha256:') ? digest.substring(7) : '';
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(hash)) {
-      throw const FormatException('Release-APK ohne SHA-256-Prüfsumme.');
+      throw FormatException('Release-$what ohne SHA-256-Prüfsumme.');
     }
     final url = Uri.tryParse(asset['browser_download_url']?.toString() ?? '');
     final size = (asset['size'] as num?)?.toInt() ?? 0;
     if (url == null || !url.hasScheme || size < 1) {
-      throw const FormatException('Release-APK ohne gültigen Download.');
+      throw FormatException('Release-$what ohne gültigen Download.');
     }
     return AppUpdateInfo(
       version: version,
@@ -190,12 +207,14 @@ class AppUpdateResult {
 
 typedef UpdateProgress = void Function(int receivedBytes, int totalBytes);
 
-/// Checks GitHub releases for a newer build, downloads the APK, verifies the
-/// digest GitHub publishes for the asset and hands the file to Android's
-/// installer.
+/// Checks GitHub releases for a newer build, downloads the asset for this
+/// platform, verifies the digest GitHub publishes for it and installs it:
+/// on Android the APK is handed to the package installer, on Windows the
+/// Inno Setup exe runs silently and relaunches the app (the app must exit
+/// for that, see [install]).
 ///
-/// Only Android can install an APK. Elsewhere [check] still reports a newer
-/// release so the release page can be opened, but [install] is refused.
+/// Elsewhere [check] still reports a newer release so the release page can
+/// be opened, but [install] is refused.
 class AppUpdateService {
   AppUpdateService({
     this.repository = kUpdateRepository,
@@ -215,13 +234,14 @@ class AppUpdateService {
   final bool _requireApk;
   bool _cancelDownload = false;
 
-  static bool get supported => Platform.isAndroid;
+  static bool get supported => Platform.isAndroid || Platform.isWindows;
 
   Uri get latestReleaseUri => Uri.parse('https://api.github.com/repos/$repository/releases/latest');
 
   /// The ABI name Flutter uses for split APKs, derived from the running
-  /// binary so no extra plugin is needed.
+  /// binary so no extra plugin is needed; [kWindowsAbi] on Windows.
   static String currentAbi() {
+    if (Platform.isWindows) return kWindowsAbi;
     final abi = Abi.current();
     if (abi == Abi.androidArm64) return 'arm64-v8a';
     if (abi == Abi.androidArm) return 'armeabi-v7a';
@@ -268,11 +288,15 @@ class AppUpdateService {
   Future<File> download(AppUpdateInfo info, UpdateProgress onProgress) async {
     final url = info.apkUrl;
     if (url == null) {
-      throw const AppUpdateException('Das Release enthält keine CastQueue-APK.');
+      throw AppUpdateException(
+        _abi == kWindowsAbi ? 'Das Release enthält kein CastQueue-Setup.' : 'Das Release enthält keine CastQueue-APK.',
+      );
     }
     _cancelDownload = false;
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/castqueue-update-${info.tag}-$_abi.apk');
+    final file = _abi == kWindowsAbi
+        ? File('${dir.path}/castqueue-update-${info.tag}.exe')
+        : File('${dir.path}/castqueue-update-${info.tag}-$_abi.apk');
     if (await file.exists()) await file.delete();
     final sink = file.openWrite();
     var received = 0;
@@ -297,7 +321,7 @@ class AppUpdateService {
       }
       final digest = await sha256.bind(file.openRead()).first;
       if (digest.toString().toLowerCase() != info.sha256) {
-        throw const AppUpdateException('Die Prüfsumme der APK stimmt nicht. Die Datei wurde verworfen.');
+        throw const AppUpdateException('Die Prüfsumme der Datei stimmt nicht. Sie wurde verworfen.');
       }
       return file;
     } catch (e) {
@@ -308,9 +332,29 @@ class AppUpdateService {
     }
   }
 
+  /// Hands the downloaded file to the platform installer.
+  ///
+  /// Windows: starts the Inno Setup exe detached in silent mode and then
+  /// exits the app — the installer cannot replace files of a running process,
+  /// and its [Run] entry relaunches CastQueue when it is done. Persist
+  /// anything important before calling this.
   Future<void> install(File file) async {
     if (!supported) {
-      throw const AppUpdateException('Die direkte Installation ist nur unter Android möglich.');
+      throw const AppUpdateException('Die direkte Installation gibt es nur unter Android und Windows.');
+    }
+    if (Platform.isWindows) {
+      try {
+        await Process.start(
+          file.path,
+          const ['/VERYSILENT', '/NORESTART', '/CLOSEAPPLICATIONS', '/SP-'],
+          mode: ProcessStartMode.detached,
+        );
+      } on ProcessException catch (e) {
+        throw AppUpdateException('Setup konnte nicht gestartet werden: ${e.message}');
+      }
+      // Give the detached process a moment to come up, then get out of its way.
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      exit(0);
     }
     final result = await OpenFilex.open(
       file.path,
@@ -323,16 +367,21 @@ class AppUpdateService {
     }
   }
 
-  /// Removes APKs left over from earlier updates. Best effort: it must never
-  /// disturb app startup.
+  /// Removes APKs / setup exes left over from earlier updates. Best effort:
+  /// it must never disturb app startup.
   Future<void> cleanupCachedApks() async {
     try {
       final dir = await getTemporaryDirectory();
       await for (final entity in dir.list()) {
+        final name = entity.uri.pathSegments.last;
         if (entity is File &&
-            entity.uri.pathSegments.last.startsWith('castqueue-update-') &&
-            entity.path.endsWith('.apk')) {
-          await entity.delete();
+            name.startsWith('castqueue-update-') &&
+            (name.endsWith('.apk') || name.endsWith('.exe'))) {
+          try {
+            await entity.delete();
+          } catch (_) {
+            // a setup that is still running keeps its file locked; next time
+          }
         }
       }
     } catch (_) {}

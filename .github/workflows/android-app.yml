@@ -1,15 +1,12 @@
 name: android app
 
-# Builds the signed Android APKs. Every push to main touching the app uploads
-# them as a build artifact; a version tag (v*) additionally publishes them as
-# a GitHub release, which is what the app's in-app update check reads.
+# Runs once per release tag (v*) and builds the signed Android APKs; start it
+# manually via workflow_dispatch for a test build (artifact only).
+# On a tag the APKs are attached to the GitHub release, which is what the
+# app's in-app updater reads.
 
 on:
   push:
-    branches: [main]
-    paths:
-      - "app/**"
-      - ".github/workflows/android-app.yml"
     tags: ["v*"]
   workflow_dispatch:
 
@@ -97,14 +94,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        # GitHub computes the SHA-256 digest of each asset; the app verifies
-        # the download against it before installing.
+        # The windows job publishes to the same release; whichever finishes
+        # first creates it, both upload. GitHub computes the SHA-256 digest of
+        # each asset; the app verifies the download against it before installing.
         run: |
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "CastQueue $TAG" \
-            --generate-notes \
-            app/build/app/outputs/flutter-apk/*.apk
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "CastQueue $TAG" --generate-notes
+          gh release upload "$TAG" app/build/app/outputs/flutter-apk/*.apk --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Explain how to install it
         run: |

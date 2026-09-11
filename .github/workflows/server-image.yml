@@ -1,11 +1,9 @@
 name: server image
 
+# Runs once per release tag (a push to main alone does not build; tag it or
+# start the workflow manually). `latest` always points at the newest tag.
 on:
   push:
-    branches: [main]
-    paths:
-      - "server/**"
-      - ".github/workflows/server-image.yml"
     tags: ["v*"]
   workflow_dispatch:
 
@@ -38,7 +36,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/castqueue
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
             type=sha,prefix=
             type=semver,pattern={{version}}
 

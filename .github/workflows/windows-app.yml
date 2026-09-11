@@ -1,0 +1,136 @@
+name: windows app
+
+# Runs once per release tag (v*) and builds the Windows app plus an Inno Setup
+# installer; start it manually via workflow_dispatch for a test build.
+# On a tag the installer is attached to the GitHub release, which is what the
+# app's in-app updater reads on Windows.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: app
+        run: flutter analyze
+
+      - name: Test
+        working-directory: app
+        run: flutter test
+
+      - name: Determine version
+        id: ver
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          TAG: ${{ github.ref_name }}
+        # On a tag the version is the tag; otherwise the pubspec version with
+        # the run number as build so package_info_plus reports something useful.
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            echo "name=${TAG#v}" >> "$GITHUB_OUTPUT"
+          else
+            v=$(sed -n 's/^version:[[:space:]]*\([0-9.]*\).*/\1/p' app/pubspec.yaml)
+            echo "name=${v:-0.0.0}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Windows app
+        working-directory: app
+        shell: bash
+        run: |
+          flutter build windows --release \
+            --build-name="${{ steps.ver.outputs.name }}" \
+            --build-number="$GITHUB_RUN_NUMBER"
+
+      - name: Bundle VC++ runtime
+        shell: pwsh
+        # Flutter's Windows runner needs the MSVC runtime; ship it next to the
+        # exe so the installer works on machines without the redistributable.
+        run: |
+          $dest = "app\build\windows\x64\runner\Release"
+          $names = @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+          $redist = Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { Get-ChildItem $_.FullName -Recurse -Directory -Filter "MSVC" -ErrorAction SilentlyContinue } |
+            Where-Object { $_.FullName -like "*\VC\Redist\MSVC" } |
+            Select-Object -First 1
+          foreach ($n in $names) {
+            $src = $null
+            if ($redist) {
+              $src = Get-ChildItem $redist.FullName -Recurse -Filter $n -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -like "*\x64\Microsoft.VC14*.CRT\*" } |
+                Sort-Object FullName -Descending | Select-Object -First 1
+            }
+            if (-not $src -and (Test-Path "C:\Windows\System32\$n")) { $src = Get-Item "C:\Windows\System32\$n" }
+            if (-not $src) { throw "Runtime DLL $n not found on runner" }
+            Copy-Item $src.FullName (Join-Path $dest $n) -Force
+            Write-Host "bundled $n from $($src.FullName)"
+          }
+          Get-ChildItem $dest
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.name }}
+        # Inno Setup 6 is preinstalled on windows-latest runners.
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup not found at $iscc" }
+          $src = (Resolve-Path "app\build\windows\x64\runner\Release").Path
+          $out = Join-Path (Get-Location) "app\build\installer"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          & $iscc "/DAppVersion=$env:APP_VERSION" "/DSourceDir=$src" "/O$out" "app\windows\installer\castqueue.iss"
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with $LASTEXITCODE" }
+          Get-ChildItem $out
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: castqueue-windows
+          path: app/build/installer/CastQueue-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        # The android job publishes to the same release; whichever finishes
+        # first creates it, both upload. GitHub computes the SHA-256 digest of
+        # each asset; the app verifies the download against it.
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "CastQueue $TAG" --generate-notes
+          gh release upload "$TAG" app/build/installer/CastQueue-Setup-*.exe --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Explain how to install it
+        shell: bash
+        run: |
+          {
+            echo "### CastQueue for Windows"
+            echo
+            echo "Download the **castqueue-windows** artifact from this run and run"
+            echo "\`CastQueue-Setup-${{ steps.ver.outputs.name }}.exe\` (per-user install, no admin)."
+          } >> "$GITHUB_STEP_SUMMARY"

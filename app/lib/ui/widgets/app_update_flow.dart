@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -6,10 +8,14 @@ import '../../core/app_update.dart';
 /// The dialogs around [AppUpdateService]: offer, download with progress,
 /// hand-over to the installer. Started only from the settings; the app never
 /// checks on its own.
+///
+/// [onBeforeInstall] runs right before the installer starts — on Windows the
+/// app exits for the update, so pending progress must be persisted there.
 class AppUpdateFlow {
-  AppUpdateFlow({AppUpdateService? service}) : service = service ?? AppUpdateService();
+  AppUpdateFlow({AppUpdateService? service, this.onBeforeInstall}) : service = service ?? AppUpdateService();
 
   final AppUpdateService service;
+  final Future<void> Function()? onBeforeInstall;
 
   Future<void> check(BuildContext context) async {
     await service.cleanupCachedApks();
@@ -28,18 +34,24 @@ class AppUpdateFlow {
   Future<void> _offer(BuildContext context, AppUpdateInfo info) async {
     final canInstall = AppUpdateService.supported && info.installable;
     final mb = (info.size / 1024 / 1024).toStringAsFixed(1);
+    final String how;
+    if (!canInstall) {
+      how = 'Die direkte Installation gibt es nur unter Android und Windows. '
+          'Das Release lässt sich im Browser öffnen.';
+    } else if (Platform.isWindows) {
+      how = 'Das Setup ($mb MB) kommt direkt aus dem GitHub-Release, wird gegen die Prüfsumme geprüft '
+          'und installiert sich still. CastQueue wird dafür beendet und danach neu gestartet.';
+    } else {
+      how = 'Die APK ($mb MB) kommt direkt aus dem GitHub-Release und wird vor der Installation gegen '
+          'die dort hinterlegte Prüfsumme geprüft. Android kann beim ersten Mal fragen, ob CastQueue '
+          'unbekannte Apps installieren darf.';
+    }
     final action = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('CastQueue ${info.version} verfügbar'),
         content: SingleChildScrollView(
-          child: Text(
-            '${info.notes.isEmpty ? 'Eine neue Version ist verfügbar.' : info.notes}\n\n'
-            '${canInstall ? 'Die APK ($mb MB) kommt direkt aus dem GitHub-Release und wird vor der '
-                'Installation gegen die dort hinterlegte Prüfsumme geprüft. Android kann beim ersten '
-                'Mal fragen, ob CastQueue unbekannte Apps installieren darf.' : 'Die direkte Installation gibt es nur unter Android. '
-                'Das Release lässt sich im Browser öffnen.'}',
-          ),
+          child: Text('${info.notes.isEmpty ? 'Eine neue Version ist verfügbar.' : info.notes}\n\n$how'),
         ),
         actions: [
           TextButton(
@@ -119,6 +131,7 @@ class AppUpdateFlow {
         dialogOpen = false;
         Navigator.of(context, rootNavigator: true).pop();
       }
+      if (onBeforeInstall != null) await onBeforeInstall!();
       await service.install(file);
     } on AppUpdateException catch (error) {
       if (!context.mounted || canceled) return;

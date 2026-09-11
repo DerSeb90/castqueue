@@ -24,6 +24,19 @@ Map<String, dynamic> _release(String tag, {bool withDigest = true}) => {
       ],
     };
 
+/// A release carrying the APKs plus the Windows setup exe.
+Map<String, dynamic> _windowsRelease(String tag, {bool withDigest = true}) {
+  final r = _release(tag, withDigest: withDigest);
+  final version = tag.replaceFirst('v', '');
+  (r['assets'] as List).add({
+    'name': 'CastQueue-Setup-$version.exe',
+    'size': 22345678,
+    'browser_download_url': 'https://github.com/DerSeb90/castqueue/releases/download/$tag/CastQueue-Setup-$version.exe',
+    if (withDigest) 'digest': 'sha256:$_sha',
+  });
+  return r;
+}
+
 AppUpdateService _service(
   Object body, {
   int status = 200,
@@ -121,6 +134,37 @@ void main() {
       expect(result.status, AppUpdateStatus.available);
       expect(result.info!.installable, isFalse);
       expect(result.info!.releaseUrl, isNotNull);
+    });
+
+    test('on Windows picks the setup exe and ignores the APKs', () async {
+      final result = await _service(_windowsRelease('v0.1.3'), abi: kWindowsAbi).check();
+      expect(result.status, AppUpdateStatus.available);
+      expect(result.info!.apkName, 'CastQueue-Setup-0.1.3.exe');
+      expect(result.info!.sha256, _sha);
+      expect(result.info!.installable, isTrue);
+    });
+
+    test('on Windows a release with only APKs is an error', () async {
+      final result = await _service(_release('v0.1.3'), abi: kWindowsAbi).check();
+      expect(result.status, AppUpdateStatus.error);
+      expect(result.error, contains('kein CastQueue-Setup'));
+    });
+
+    test('on Windows a setup without digest is refused', () async {
+      final result = await _service(_windowsRelease('v0.1.3', withDigest: false), abi: kWindowsAbi).check();
+      expect(result.status, AppUpdateStatus.error);
+      expect(result.error, contains('Prüfsumme'));
+    });
+
+    test('Android still picks its APK when a setup exe is present', () async {
+      final result = await _service(_windowsRelease('v0.1.3')).check();
+      expect(result.info!.apkName, 'app-arm64-v8a-release.apk');
+    });
+
+    test('setup name pattern', () {
+      expect(kReleaseSetupName.hasMatch('CastQueue-Setup-0.1.3.exe'), isTrue);
+      expect(kReleaseSetupName.hasMatch('castqueue.exe'), isFalse);
+      expect(kReleaseSetupName.hasMatch('CastQueue-Setup-0.1.3.exe.sha256'), isFalse);
     });
 
     test('reports API failures without throwing', () async {

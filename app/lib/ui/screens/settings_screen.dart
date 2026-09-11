@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -92,8 +94,11 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _checkForUpdates(BuildContext context) async {
-    final flow = AppUpdateFlow();
+  Future<void> _checkForUpdates(BuildContext context, WidgetRef ref) async {
+    // On Windows the app exits for the installer: flush progress first.
+    final flow = AppUpdateFlow(
+      onBeforeInstall: () => ref.read(playbackControllerProvider.notifier).onAppPaused(),
+    );
     try {
       await flow.check(context);
     } finally {
@@ -327,10 +332,12 @@ class SettingsScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.system_update_alt_rounded),
                   title: const Text('Nach Updates suchen'),
-                  subtitle: Text(AppUpdateService.supported
-                      ? 'Lädt die neue APK direkt von GitHub'
-                      : 'Öffnet das neueste Release auf GitHub'),
-                  onTap: () => _checkForUpdates(context),
+                  subtitle: Text(Platform.isWindows
+                      ? 'Lädt das Setup direkt von GitHub und installiert es'
+                      : AppUpdateService.supported
+                          ? 'Lädt die neue APK direkt von GitHub'
+                          : 'Öffnet das neueste Release auf GitHub'),
+                  onTap: () => _checkForUpdates(context, ref),
                 ),
                 ListTile(
                   leading: const Icon(Icons.code_rounded),
