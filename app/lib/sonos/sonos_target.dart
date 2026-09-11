@@ -31,6 +31,12 @@ class SonosTarget implements PlaybackTarget {
   bool _polling = false;
   bool _stoppedByUs = false;
   bool _disposed = false;
+  int _pollFailures = 0;
+
+  /// Consecutive poll failures before the user sees an error. A single
+  /// timeout is normal right after the phone wakes up (Wi-Fi reconnecting,
+  /// Doze) and clears itself with the next successful poll.
+  static const _pollFailureGrace = 3;
 
   @override
   String get id => 'sonos:${device.uuid}';
@@ -57,6 +63,7 @@ class SonosTarget implements PlaybackTarget {
   Future<void> load(PlayItem item, {Duration startAt = Duration.zero, bool autoplay = true}) async {
     _ensureAlive();
     _stoppedByUs = false;
+    _pollFailures = 0;
     _current = item;
     _next = null;
     _emit(PlaybackStatus(
@@ -98,6 +105,7 @@ class SonosTarget implements PlaybackTarget {
   Future<void> play() async {
     _ensureAlive();
     _stoppedByUs = false;
+    _pollFailures = 0;
     await _av('Play', {'Speed': '1'});
     _emit(_status.copyWith(state: PlaybackState.playing));
     _schedulePoll();
@@ -260,6 +268,7 @@ class SonosTarget implements PlaybackTarget {
     try {
       final pos = await _av('GetPositionInfo');
       final ti = await _av('GetTransportInfo');
+      _pollFailures = 0;
       _applyPoll(
         transportState: ti['CurrentTransportState'] ?? '',
         relTime: pos['RelTime'],
@@ -268,8 +277,11 @@ class SonosTarget implements PlaybackTarget {
       );
     } catch (e) {
       // Transient network error: keep the last status, poll again later.
-      if (_status.state == PlaybackState.playing || _status.state == PlaybackState.loading) {
-        _emit(_status.copyWith(error: e.toString()));
+      // Only after several failures in a row tell the user.
+      _pollFailures++;
+      final active = _status.state == PlaybackState.playing || _status.state == PlaybackState.loading;
+      if (active && _pollFailures == _pollFailureGrace) {
+        _emit(_status.copyWith(error: 'Sonos „${device.roomName}“ antwortet nicht: $e'));
       }
     } finally {
       _polling = false;

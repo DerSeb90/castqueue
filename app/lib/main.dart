@@ -42,7 +42,7 @@ Future<void> main() async {
         androidNotificationChannelName: 'Wiedergabe',
         androidNotificationOngoing: true,
         androidStopForegroundOnPause: true,
-        androidNotificationIcon: 'mipmap/ic_launcher',
+        androidNotificationIcon: 'drawable/ic_launcher_monochrome',
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show ImageFilter;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -126,7 +127,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                         onNext: ctl.next,
                       ),
                       const SizedBox(height: 20),
-                      _OutputRow(state: s, onVolume: ctl.setVolume),
+                      _OutputRow(
+                        state: s,
+                        onVolume: ctl.setVolume,
+                        onSleep: () => _pickSleep(context, s.sleepTimer),
+                      ),
                       if (s.status.state == PlaybackState.error && s.error != null) ...[
                         const SizedBox(height: 12),
                         Text(s.error!, style: text.bodySmall?.copyWith(color: scheme.error), textAlign: TextAlign.center),
@@ -173,6 +178,88 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       ),
     );
     if (v != null) await ref.read(playbackControllerProvider.notifier).setSpeed(v);
+  }
+}
+
+extension on _NowPlayingScreenState {
+  Future<void> _pickSleep(BuildContext context, SleepTimer? current) async {
+    const minutes = [15, 30, 45, 60, 90];
+    final ctl = ref.read(playbackControllerProvider.notifier);
+    final active = current != null;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      constraints: const BoxConstraints(maxWidth: 420),
+      builder: (ctx) {
+        final text = Theme.of(ctx).textTheme;
+        final scheme = Theme.of(ctx).colorScheme;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                child: Text('Sleep-Timer', style: text.titleLarge),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Text(
+                  active
+                      ? (current.endOfEpisode
+                          ? 'Aktiv: Wiedergabe endet mit dieser Folge.'
+                          : 'Aktiv: noch ${formatDuration(current.remaining ?? Duration.zero)}.')
+                      : 'Wiedergabe nach einer Zeit oder am Ende der Folge pausieren.',
+                  style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final m in minutes)
+                      ChoiceChip(
+                        label: Text('$m Min.'),
+                        selected: false,
+                        onSelected: (_) => Navigator.pop(ctx, 'm$m'),
+                      ),
+                    ChoiceChip(
+                      label: const Text('Ende der Folge'),
+                      selected: current?.endOfEpisode == true,
+                      onSelected: (_) => Navigator.pop(ctx, 'end'),
+                    ),
+                    if (active && !current.endOfEpisode)
+                      ActionChip(
+                        avatar: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('15 Min.'),
+                        onPressed: () => Navigator.pop(ctx, 'plus'),
+                      ),
+                    if (active)
+                      ActionChip(
+                        avatar: Icon(Icons.close_rounded, size: 18, color: scheme.error),
+                        label: const Text('Aus'),
+                        onPressed: () => Navigator.pop(ctx, 'off'),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
+    );
+    if (choice == null) return;
+    if (choice == 'off') {
+      ctl.cancelSleepTimer();
+    } else if (choice == 'end') {
+      ctl.setSleepAtEpisodeEnd();
+    } else if (choice == 'plus') {
+      ctl.extendSleepTimer(const Duration(minutes: 15));
+    } else if (choice.startsWith('m')) {
+      ctl.setSleepTimer(Duration(minutes: int.parse(choice.substring(1))));
+    }
   }
 }
 
@@ -447,9 +534,10 @@ class _PlayButton extends StatelessWidget {
 
 /// Output target pill plus, when the target supports it, the volume row.
 class _OutputRow extends StatelessWidget {
-  const _OutputRow({required this.state, required this.onVolume});
+  const _OutputRow({required this.state, required this.onVolume, required this.onSleep});
   final PlaybackUiState state;
   final ValueChanged<double> onVolume;
+  final VoidCallback onSleep;
 
   @override
   Widget build(BuildContext context) {
@@ -463,18 +551,38 @@ class _OutputRow extends StatelessWidget {
             ? Icons.volume_down_rounded
             : Icons.volume_up_rounded;
 
+    final sleep = s.sleepTimer;
+    ButtonStyle pill(Color fg) => OutlinedButton.styleFrom(
+          shape: const StadiumBorder(),
+          side: BorderSide(color: scheme.onSurface.withValues(alpha: 0.18)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          foregroundColor: fg,
+        );
+
     return Column(
       children: [
-        OutlinedButton.icon(
-          onPressed: () => OutputPicker.show(context),
-          style: OutlinedButton.styleFrom(
-            shape: const StadiumBorder(),
-            side: BorderSide(color: scheme.onSurface.withValues(alpha: 0.18)),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            foregroundColor: s.isSonos ? scheme.primary : scheme.onSurface,
-          ),
-          icon: Icon(s.isSonos ? Icons.speaker_rounded : Icons.devices_rounded, size: 18),
-          label: Text(s.targetName, maxLines: 1, overflow: TextOverflow.ellipsis),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => OutputPicker.show(context),
+              style: pill(s.isSonos ? scheme.primary : scheme.onSurface),
+              icon: Icon(s.isSonos ? Icons.speaker_rounded : Icons.devices_rounded, size: 18),
+              label: Text(s.targetName, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            OutlinedButton.icon(
+              onPressed: onSleep,
+              style: pill(sleep != null ? scheme.primary : scheme.onSurfaceVariant),
+              icon: Icon(sleep != null ? Icons.bedtime_rounded : Icons.bedtime_outlined, size: 18),
+              label: sleep == null
+                  ? const Text('Sleep-Timer')
+                  : sleep.endOfEpisode
+                      ? const Text('Bis Folgenende')
+                      : _SleepCountdown(timer: sleep),
+            ),
+          ],
         ),
         if (s.targetSupportsVolume) ...[
           const SizedBox(height: 4),
@@ -511,6 +619,41 @@ class _OutputRow extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Remaining sleep time, ticking once a second (the player state alone does
+/// not update while paused).
+class _SleepCountdown extends StatefulWidget {
+  const _SleepCountdown({required this.timer});
+  final SleepTimer timer;
+
+  @override
+  State<_SleepCountdown> createState() => _SleepCountdownState();
+}
+
+class _SleepCountdownState extends State<_SleepCountdown> {
+  Timer? _tick;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.timer.remaining ?? Duration.zero;
+    return Text(
+      formatDuration(r),
+      style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
     );
   }
 }

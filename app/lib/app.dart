@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/platform.dart';
 import 'core/sync_service.dart';
 import 'playback/playback_controller.dart';
 import 'state/app_state.dart';
@@ -25,6 +26,8 @@ class _CastQueueAppState extends ConsumerState<CastQueueApp> with WidgetsBinding
     if (ref.read(sessionProvider) != null) {
       Future.microtask(() => ref.read(syncServiceProvider).start());
     }
+    // Media notification / lockscreen controls need this on Android 13+.
+    WidgetsBinding.instance.addPostFrameCallback((_) => AppPlatform.requestNotificationPermission());
   }
 
   @override

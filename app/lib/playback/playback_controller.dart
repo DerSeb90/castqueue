@@ -5,12 +5,32 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api_client.dart';
 import '../core/models.dart';
+import '../core/sync_service.dart';
 import '../downloads/download_manager.dart';
 import '../sonos/sonos.dart';
 import '../state/app_state.dart';
 import '../state/library.dart';
 import 'local_target.dart';
 import 'playback_target.dart';
+
+/// Pauses playback after a fixed time or at the end of the current episode.
+class SleepTimer {
+  const SleepTimer.until(DateTime this.endsAt) : endOfEpisode = false;
+  const SleepTimer.endOfEpisode()
+      : endsAt = null,
+        endOfEpisode = true;
+
+  /// Wall-clock time when playback pauses; `null` for [endOfEpisode].
+  final DateTime? endsAt;
+  final bool endOfEpisode;
+
+  Duration? get remaining {
+    final e = endsAt;
+    if (e == null) return null;
+    final r = e.difference(DateTime.now());
+    return r < Duration.zero ? Duration.zero : r;
+  }
+}
 
 class PlaybackUiState {
   const PlaybackUiState({
@@ -26,6 +46,7 @@ class PlaybackUiState {
     this.discovering = false,
     this.error,
     this.notice,
+    this.sleepTimer,
   });
 
   final Episode? episode;
@@ -42,6 +63,9 @@ class PlaybackUiState {
 
   /// Non-error information for the user (e.g. playback taken over elsewhere).
   final String? notice;
+
+  /// Active sleep timer, `null` when off.
+  final SleepTimer? sleepTimer;
 
   bool get hasItem => episode != null && status.state != PlaybackState.idle;
   bool get isPlaying => status.state == PlaybackState.playing || status.state == PlaybackState.loading;
@@ -71,9 +95,12 @@ class PlaybackUiState {
     bool clearError = false,
     String? notice,
     bool clearNotice = false,
+    SleepTimer? sleepTimer,
+    bool clearSleepTimer = false,
   }) =>
       PlaybackUiState(
         notice: clearNotice ? null : (notice ?? this.notice),
+        sleepTimer: clearSleepTimer ? null : (sleepTimer ?? this.sleepTimer),
         episode: clearEpisode ? null : (episode ?? this.episode),
         status: status ?? this.status,
         targetId: targetId ?? this.targetId,
@@ -94,6 +121,8 @@ class PlaybackController extends Notifier<PlaybackUiState> {
   late PlaybackTarget _target;
   StreamSubscription<PlaybackStatus>? _sub;
   Timer? _progressTimer;
+  Timer? _sleepTimer;
+  bool _sleepExpiring = false;
   bool _handlingCompletion = false;
   String? _completedFor;
   static const _reportEvery = Duration(seconds: 10);
@@ -109,11 +138,15 @@ class PlaybackController extends Notifier<PlaybackUiState> {
         unawaited(_report());
         unawaited(_heartbeat());
       }
+      // Dart timers may fire late after Doze; catch an overdue sleep timer here.
+      final ends = state.sleepTimer?.endsAt;
+      if (ends != null && !DateTime.now().isBefore(ends)) unawaited(_sleepExpired());
     });
     ref.listen(libraryProvider.select((s) => s.queueIds), (_, _) => unawaited(_updateNextHint()));
     ref.listen(libraryProvider.select((s) => s.playback), (_, lock) => unawaited(_onServerLock(lock)));
     ref.onDispose(() {
       _progressTimer?.cancel();
+      _sleepTimer?.cancel();
       _sub?.cancel();
       if (!identical(_target, _local)) unawaited(_target.dispose());
       unawaited(_local.dispose());
@@ -250,6 +283,7 @@ class PlaybackController extends Notifier<PlaybackUiState> {
     if (report && state.hasItem) await _report();
     unawaited(_release());
     _completedFor = null;
+    _clearSleepTimer();
     try {
       await _target.stop();
     } catch (_) {}
@@ -315,6 +349,11 @@ class PlaybackController extends Notifier<PlaybackUiState> {
     _handlingCompletion = true;
     try {
       await _report(episode: ep, played: true, position: ep.durationMs > 0 ? ep.duration : state.position);
+      if (state.sleepTimer?.endOfEpisode == true) {
+        await stop(report: false);
+        await _afterSleep('Sleep-Timer: Folge zu Ende, Wiedergabe beendet.');
+        return;
+      }
       final n = _nextInQueue(ep.id);
       if (n != null) {
         await playEpisode(n);
@@ -324,6 +363,83 @@ class PlaybackController extends Notifier<PlaybackUiState> {
     } finally {
       _handlingCompletion = false;
     }
+  }
+
+  // ---------------------------------------------------------- sleep timer
+
+  static const _fadeSteps = 10;
+  static const _fadeStepEvery = Duration(milliseconds: 400);
+
+  /// Pause after [duration]. Replaces any running timer.
+  void setSleepTimer(Duration duration) {
+    _sleepTimer?.cancel();
+    final ends = DateTime.now().add(duration);
+    _sleepTimer = Timer(duration, () => unawaited(_sleepExpired()));
+    state = state.copyWith(sleepTimer: SleepTimer.until(ends));
+  }
+
+  /// Add [extra] to a running timer (or start one with [extra]).
+  void extendSleepTimer(Duration extra) {
+    final rem = state.sleepTimer?.remaining ?? Duration.zero;
+    setSleepTimer(rem + extra);
+  }
+
+  /// Stop after the current episode instead of advancing the queue.
+  void setSleepAtEpisodeEnd() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    state = state.copyWith(sleepTimer: const SleepTimer.endOfEpisode());
+  }
+
+  void cancelSleepTimer() => _clearSleepTimer();
+
+  void _clearSleepTimer() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    if (state.sleepTimer != null) state = state.copyWith(clearSleepTimer: true);
+  }
+
+  Future<void> _sleepExpired() async {
+    if (_sleepExpiring) return;
+    _sleepExpiring = true;
+    try {
+      _clearSleepTimer();
+      if (state.hasItem && state.isPlaying) {
+        if (identical(_target, _local)) {
+          await _fadeOutLocal();
+        } else {
+          await pause();
+        }
+      }
+      await _afterSleep('Sleep-Timer abgelaufen – Wiedergabe pausiert.');
+    } finally {
+      _sleepExpiring = false;
+    }
+  }
+
+  /// Fade the local player down over a few seconds, pause, restore volume.
+  Future<void> _fadeOutLocal() async {
+    final v = state.volume;
+    try {
+      for (var i = 1; i <= _fadeSteps; i++) {
+        if (!state.isPlaying) break; // user paused/stopped meanwhile
+        await _local.setVolume(v * (_fadeSteps - i) / _fadeSteps);
+        await Future<void>.delayed(_fadeStepEvery);
+      }
+      if (state.isPlaying) await pause();
+    } finally {
+      try {
+        await _local.setVolume(v);
+      } catch (_) {}
+    }
+  }
+
+  /// Progress is on the server, local state persisted; use the moment for a
+  /// sync (background sync is otherwise best effort).
+  Future<void> _afterSleep(String notice) async {
+    state = state.copyWith(notice: notice);
+    await _lib.persistNow();
+    unawaited(ref.read(syncServiceProvider).syncNow());
   }
 
   // ------------------------------------------------------------ progress
