@@ -10,15 +10,19 @@ dependencies:
   audio_service: ^0.18.19
   cached_network_image: ^4.0.0
   collection: ^1.19.1
+  crypto: ^3.0.7
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.4.3
   flutter_widget_from_html_core: ^0.17.4
   http: ^1.6.0
+  image: ^4.9.2
   intl: ^0.20.3
   just_audio: ^0.10.6
   just_audio_media_kit: ^2.1.0
   media_kit_libs_windows_audio: ^1.0.9
+  open_filex: ^4.7.0
+  package_info_plus: ^10.2.1
   path_provider: ^2.1.6
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.2

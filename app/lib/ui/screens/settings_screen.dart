@@ -1,14 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/app_update.dart';
 import '../../core/sync_service.dart';
 import '../../downloads/download_manager.dart';
+import '../../ipod/rockbox_device.dart';
 import '../../playback/playback_controller.dart';
 import '../../state/app_state.dart';
 import '../../state/library.dart';
 import '../format.dart';
+import '../widgets/app_update_flow.dart';
 import 'devices_screen.dart';
+import 'ipod_screen.dart';
+
+const _kRepoUrl = 'https://github.com/$kUpdateRepository';
+
+final packageInfoProvider = FutureProvider<PackageInfo>((_) => PackageInfo.fromPlatform());
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -83,11 +93,21 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _checkForUpdates(BuildContext context) async {
+    final flow = AppUpdateFlow();
+    try {
+      await flow.check(context);
+    } finally {
+      flow.close();
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     final prefs = ref.watch(appPrefsProvider);
     final lib = ref.watch(libraryProvider);
+    final pkg = ref.watch(packageInfoProvider);
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
 
@@ -233,6 +253,16 @@ class SettingsScreen extends ConsumerWidget {
                     onChanged: (v) => ref.read(appPrefsProvider.notifier).setAutoDeleteDownloads(v),
                   ),
                 ]),
+              if (ipodSupported)
+                section('iPod', [
+                  ListTile(
+                    leading: const Icon(Icons.usb_rounded),
+                    title: const Text('iPod (Rockbox) synchronisieren'),
+                    subtitle: const Text('Folgen mit Cover auf einen Rockbox-Player kopieren'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const IpodScreen())),
+                  ),
+                ]),
               section('OPML', [
                 ListTile(
                   leading: const Icon(Icons.file_download_outlined),
@@ -267,6 +297,32 @@ class SettingsScreen extends ConsumerWidget {
                       }
                     });
                   },
+                ),
+              ]),
+              section('App', [
+                ListTile(
+                  leading: const Icon(Icons.info_outline_rounded),
+                  title: const Text('Version'),
+                  subtitle: Text(pkg.when(
+                    data: (p) => '${p.version} (Build ${p.buildNumber})',
+                    loading: () => '…',
+                    error: (_, _) => 'unbekannt',
+                  )),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.system_update_alt_rounded),
+                  title: const Text('Nach Updates suchen'),
+                  subtitle: Text(AppUpdateService.supported
+                      ? 'Lädt die neue APK direkt von GitHub'
+                      : 'Öffnet das neueste Release auf GitHub'),
+                  onTap: () => _checkForUpdates(context),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.code_rounded),
+                  title: const Text('GitHub'),
+                  subtitle: const Text(_kRepoUrl),
+                  trailing: const Icon(Icons.open_in_new_rounded),
+                  onTap: () => launchUrl(Uri.parse(_kRepoUrl), mode: LaunchMode.externalApplication),
                 ),
               ]),
               section('Konto', [
