@@ -89,9 +89,10 @@ ThemeData _base(ColorScheme scheme) {
       backgroundColor: scheme.surfaceContainerLowest,
       indicatorColor: scheme.primary.withValues(alpha: 0.18),
       surfaceTintColor: Colors.transparent,
-      height: 68,
+      height: 64,
       labelTextStyle: WidgetStateProperty.resolveWith(
-        (s) => text.labelMedium?.copyWith(
+        (s) => text.labelSmall?.copyWith(
+          letterSpacing: 0.2,
           color: s.contains(WidgetState.selected) ? scheme.primary : scheme.onSurfaceVariant,
           fontWeight: FontWeight.w600,
         ),

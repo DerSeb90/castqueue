@@ -1,3 +1,6 @@
+import 'dart:ui' show ImageFilter;
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +11,8 @@ import '../widgets/artwork.dart';
 import '../widgets/output_picker.dart';
 import 'episode_screen.dart';
 
+/// Full-screen player. The artwork sets the mood: a blurred, darkened copy of
+/// it fills the background and fades into the surface where the controls sit.
 class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key});
 
@@ -47,12 +52,22 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
     final total = s.duration;
     final totalMs = total.inMilliseconds.toDouble();
-    final posMs = (_dragValue ?? s.position.inMilliseconds.toDouble()).clamp(0.0, totalMs > 0 ? totalMs : double.infinity);
+    final posMs = (_dragValue ?? s.position.inMilliseconds.toDouble())
+        .clamp(0.0, totalMs > 0 ? totalMs : double.infinity)
+        .toDouble();
+    final position = Duration(milliseconds: posMs.round());
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.expand_more_rounded), onPressed: () => Navigator.of(context).maybePop()),
+        backgroundColor: Colors.transparent,
+        leading: IconButton(
+          tooltip: 'Schließen',
+          icon: const Icon(Icons.expand_more_rounded),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         title: Text('Läuft gerade', style: text.titleMedium),
+        centerTitle: true,
         actions: [
           IconButton(
             tooltip: 'Episode',
@@ -62,137 +77,67 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
           ),
         ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-            child: Column(
-              children: [
-                Expanded(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 360),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(color: Colors.black.withValues(alpha: 0.45), blurRadius: 40, offset: const Offset(0, 16)),
-                          ],
-                        ),
-                        child: Artwork(url: ep.artworkUrl, size: null, radius: 24),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(ep.title,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.titleLarge),
-                const SizedBox(height: 4),
-                Text(ep.podcastTitle,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.bodyMedium?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 16),
-                Slider(
-                  value: totalMs > 0 ? posMs : 0,
-                  max: totalMs > 0 ? totalMs : 1,
-                  onChanged: totalMs > 0 ? (v) => setState(() => _dragValue = v) : null,
-                  onChangeEnd: (v) async {
-                    setState(() => _dragValue = null);
-                    await ctl.seek(Duration(milliseconds: v.round()));
-                  },
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          _Background(url: ep.artworkUrl),
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                  child: Column(
                     children: [
-                      Text(formatDuration(Duration(milliseconds: posMs.round())),
-                          style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                      const Spacer(),
-                      Text(total > Duration.zero ? '-${formatDuration(total - Duration(milliseconds: posMs.round()))}' : '--:--',
-                          style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                      Expanded(child: _ArtworkCard(url: ep.artworkUrl)),
+                      const SizedBox(height: 28),
+                      Text(
+                        ep.title,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        ep.podcastTitle,
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.bodyMedium?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 20),
+                      _ProgressBar(
+                        position: position,
+                        total: total,
+                        onChanged: totalMs > 0 ? (v) => setState(() => _dragValue = v) : null,
+                        onChangeEnd: (v) async {
+                          setState(() => _dragValue = null);
+                          await ctl.seek(Duration(milliseconds: v.round()));
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _Controls(
+                        state: s,
+                        onSpeed: s.targetSupportsSpeed ? () => _pickSpeed(context, s.speed) : null,
+                        onBack: ctl.skipBack,
+                        onToggle: ctl.togglePlay,
+                        onForward: ctl.skipForward,
+                        onNext: ctl.next,
+                      ),
+                      const SizedBox(height: 20),
+                      _OutputRow(state: s, onVolume: ctl.setVolume),
+                      if (s.status.state == PlaybackState.error && s.error != null) ...[
+                        const SizedBox(height: 12),
+                        Text(s.error!, style: text.bodySmall?.copyWith(color: scheme.error), textAlign: TextAlign.center),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    IconButton(
-                      tooltip: 'Geschwindigkeit',
-                      onPressed: s.targetSupportsSpeed ? () => _pickSpeed(context, s.speed) : null,
-                      icon: Text('${s.speed.toStringAsFixed(s.speed % 1 == 0 ? 0 : 2).replaceAll(RegExp(r'0$'), '')}×',
-                          style: text.titleMedium?.copyWith(
-                              color: s.targetSupportsSpeed ? scheme.onSurface : scheme.onSurfaceVariant)),
-                    ),
-                    IconButton(iconSize: 40, onPressed: ctl.skipBack, icon: const Icon(Icons.replay_10_rounded)),
-                    FilledButton(
-                      onPressed: ctl.togglePlay,
-                      style: FilledButton.styleFrom(
-                        shape: const CircleBorder(),
-                        padding: const EdgeInsets.all(18),
-                      ),
-                      child: s.isLoading
-                          ? SizedBox(
-                              width: 36,
-                              height: 36,
-                              child: CircularProgressIndicator(strokeWidth: 3, color: scheme.onPrimary))
-                          : Icon(s.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, size: 36),
-                    ),
-                    IconButton(iconSize: 40, onPressed: ctl.skipForward, icon: const Icon(Icons.forward_30_rounded)),
-                    IconButton(tooltip: 'Nächste', iconSize: 32, onPressed: ctl.next, icon: const Icon(Icons.skip_next_rounded)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: () => OutputPicker.show(context),
-                  icon: Icon(s.isSonos ? Icons.speaker_rounded : Icons.devices_rounded, size: 18),
-                  label: Text(s.targetName),
-                ),
-                if (s.targetSupportsVolume) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      IconButton(
-                        tooltip: s.volume == 0 ? 'Ton an' : 'Stumm',
-                        onPressed: () => ctl.setVolume(s.volume == 0 ? 0.5 : 0),
-                        icon: Icon(
-                          s.volume == 0
-                              ? Icons.volume_off_rounded
-                              : s.volume < 0.5
-                                  ? Icons.volume_down_rounded
-                                  : Icons.volume_up_rounded,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: s.volume.clamp(0.0, 1.0),
-                          onChanged: (v) => ctl.setVolume(v),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 40,
-                        child: Text('${(s.volume * 100).round()}%',
-                            textAlign: TextAlign.end,
-                            style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                      ),
-                    ],
-                  ),
-                ],
-                if (s.status.state == PlaybackState.error && s.error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(s.error!, style: text.bodySmall?.copyWith(color: scheme.error), textAlign: TextAlign.center),
-                ],
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -216,7 +161,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               children: [
                 for (final sp in speeds)
                   ChoiceChip(
-                    label: Text('$sp×'),
+                    label: Text(_fmtSpeed(sp)),
                     selected: (sp - current).abs() < 0.01,
                     onSelected: (_) => Navigator.pop(ctx, sp),
                   ),
@@ -228,5 +173,344 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       ),
     );
     if (v != null) await ref.read(playbackControllerProvider.notifier).setSpeed(v);
+  }
+}
+
+/// "1×", "1.2×", "1.75×".
+String _fmtSpeed(double v) {
+  var s = v.toStringAsFixed(2);
+  s = s.replaceFirst(RegExp(r'\.?0+$'), '');
+  return '$s×';
+}
+
+/// Blurred artwork behind everything, fading into the scaffold colour so the
+/// lower half (text and controls) always sits on a calm, readable surface.
+class _Background extends StatelessWidget {
+  const _Background({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
+    final hasImage = url.isNotEmpty && Uri.tryParse(url)?.hasScheme == true;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(color: bg),
+        if (hasImage)
+          ClipRect(
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 48, sigmaY: 48, tileMode: TileMode.clamp),
+              child: Transform.scale(
+                scale: 1.4,
+                child: CachedNetworkImage(
+                  imageUrl: url,
+                  fit: BoxFit.cover,
+                  fadeInDuration: const Duration(milliseconds: 400),
+                  errorWidget: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          )
+        else
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: const Alignment(0, -0.6),
+                radius: 1.1,
+                colors: [scheme.primary.withValues(alpha: 0.22), bg],
+              ),
+            ),
+          ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [0, 0.45, 0.78, 1],
+              colors: [
+                bg.withValues(alpha: 0.35),
+                bg.withValues(alpha: 0.72),
+                bg.withValues(alpha: 0.97),
+                bg,
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Square artwork that shrinks with the available height, lifted by a soft
+/// shadow so it reads as an object on top of the blurred wash.
+class _ArtworkCard extends StatelessWidget {
+  const _ArtworkCard({required this.url});
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380, maxHeight: 380),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 48, offset: const Offset(0, 20)),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4)),
+              ],
+            ),
+            child: Artwork(url: url, size: null, radius: 22),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProgressBar extends StatelessWidget {
+  const _ProgressBar({
+    required this.position,
+    required this.total,
+    required this.onChanged,
+    required this.onChangeEnd,
+  });
+
+  final Duration position;
+  final Duration total;
+  final ValueChanged<double>? onChanged;
+  final ValueChanged<double> onChangeEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final totalMs = total.inMilliseconds.toDouble();
+    final known = totalMs > 0;
+    final remaining = known ? total - position : Duration.zero;
+    final timeStyle = text.labelMedium?.copyWith(
+      color: scheme.onSurfaceVariant,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+    return Column(
+      children: [
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 4,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7, elevation: 0),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+            inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.14),
+            trackShape: const RoundedRectSliderTrackShape(),
+          ),
+          child: Slider(
+            value: known ? position.inMilliseconds.toDouble().clamp(0.0, totalMs) : 0,
+            max: known ? totalMs : 1,
+            onChanged: onChanged,
+            onChangeEnd: onChangeEnd,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              Text(formatDuration(position), style: timeStyle),
+              const Spacer(),
+              Text(known ? '-${formatDuration(remaining)}' : '--:--', style: timeStyle),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Controls extends StatelessWidget {
+  const _Controls({
+    required this.state,
+    required this.onSpeed,
+    required this.onBack,
+    required this.onToggle,
+    required this.onForward,
+    required this.onNext,
+  });
+
+  final PlaybackUiState state;
+  final VoidCallback? onSpeed;
+  final VoidCallback onBack;
+  final VoidCallback onToggle;
+  final VoidCallback onForward;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final s = state;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        SizedBox(
+          width: 64,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton(
+              onPressed: onSpeed,
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minimumSize: const Size(0, 34),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: const StadiumBorder(),
+                side: BorderSide(color: scheme.onSurface.withValues(alpha: 0.18)),
+                foregroundColor: s.targetSupportsSpeed ? scheme.onSurface : scheme.onSurfaceVariant,
+              ),
+              child: Text(_fmtSpeed(s.speed), style: text.labelLarge?.copyWith(fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: '10 Sekunden zurück',
+          iconSize: 36,
+          onPressed: onBack,
+          icon: const Icon(Icons.replay_10_rounded),
+        ),
+        _PlayButton(isPlaying: s.isPlaying, isLoading: s.isLoading, onPressed: onToggle),
+        IconButton(
+          tooltip: '30 Sekunden vor',
+          iconSize: 36,
+          onPressed: onForward,
+          icon: const Icon(Icons.forward_30_rounded),
+        ),
+        SizedBox(
+          width: 64,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              tooltip: 'Nächste Folge',
+              iconSize: 30,
+              onPressed: onNext,
+              icon: const Icon(Icons.skip_next_rounded),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PlayButton extends StatelessWidget {
+  const _PlayButton({required this.isPlaying, required this.isLoading, required this.onPressed});
+  final bool isPlaying;
+  final bool isLoading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(color: scheme.primary.withValues(alpha: 0.35), blurRadius: 24, offset: const Offset(0, 8)),
+        ],
+      ),
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          shape: const CircleBorder(),
+          padding: EdgeInsets.zero,
+          fixedSize: const Size(72, 72),
+        ),
+        child: isLoading
+            ? SizedBox(
+                width: 30,
+                height: 30,
+                child: CircularProgressIndicator(strokeWidth: 3, color: scheme.onPrimary),
+              )
+            : AnimatedSwitcher(
+                duration: const Duration(milliseconds: 150),
+                child: Icon(
+                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  key: ValueKey(isPlaying),
+                  size: 40,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+/// Output target pill plus, when the target supports it, the volume row.
+class _OutputRow extends StatelessWidget {
+  const _OutputRow({required this.state, required this.onVolume});
+  final PlaybackUiState state;
+  final ValueChanged<double> onVolume;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final s = state;
+    final vol = s.volume.clamp(0.0, 1.0);
+    final volIcon = vol == 0
+        ? Icons.volume_off_rounded
+        : vol < 0.5
+            ? Icons.volume_down_rounded
+            : Icons.volume_up_rounded;
+
+    return Column(
+      children: [
+        OutlinedButton.icon(
+          onPressed: () => OutputPicker.show(context),
+          style: OutlinedButton.styleFrom(
+            shape: const StadiumBorder(),
+            side: BorderSide(color: scheme.onSurface.withValues(alpha: 0.18)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            foregroundColor: s.isSonos ? scheme.primary : scheme.onSurface,
+          ),
+          icon: Icon(s.isSonos ? Icons.speaker_rounded : Icons.devices_rounded, size: 18),
+          label: Text(s.targetName, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+        if (s.targetSupportsVolume) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              IconButton(
+                tooltip: vol == 0 ? 'Ton an' : 'Stumm',
+                onPressed: () => onVolume(vol == 0 ? 0.5 : 0),
+                icon: Icon(volIcon, color: scheme.onSurfaceVariant),
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 3,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                    inactiveTrackColor: scheme.onSurface.withValues(alpha: 0.14),
+                  ),
+                  child: Slider(value: vol, onChanged: onVolume),
+                ),
+              ),
+              SizedBox(
+                width: 40,
+                child: Text(
+                  '${(vol * 100).round()}%',
+                  textAlign: TextAlign.end,
+                  style: text.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
   }
 }

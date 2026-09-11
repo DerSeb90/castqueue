@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../ipod/rockbox_device.dart';
 import '../playback/playback_controller.dart';
 import '../state/library.dart';
 import 'format.dart';
 import 'screens/inbox_screen.dart';
+import 'screens/ipod_screen.dart';
 import 'screens/podcasts_screen.dart';
 import 'screens/queue_screen.dart';
 import 'screens/settings_screen.dart';
@@ -23,11 +25,13 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
 
+  /// `label` is used on the wide NavigationRail, `short` on the phone bar,
+  /// where four destinations share ~360 dp and long words wrap.
   static const _destinations = [
-    (icon: Icons.queue_music_outlined, selected: Icons.queue_music_rounded, label: 'Warteschlange'),
-    (icon: Icons.podcasts_outlined, selected: Icons.podcasts_rounded, label: 'Abos'),
-    (icon: Icons.inbox_outlined, selected: Icons.inbox_rounded, label: 'Neu'),
-    (icon: Icons.settings_outlined, selected: Icons.settings_rounded, label: 'Einstellungen'),
+    (icon: Icons.queue_music_outlined, selected: Icons.queue_music_rounded, label: 'Warteschlange', short: 'Liste'),
+    (icon: Icons.podcasts_outlined, selected: Icons.podcasts_rounded, label: 'Abos', short: 'Abos'),
+    (icon: Icons.inbox_outlined, selected: Icons.inbox_rounded, label: 'Neu', short: 'Neu'),
+    (icon: Icons.settings_outlined, selected: Icons.settings_rounded, label: 'Einstellungen', short: 'Mehr'),
   ];
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
@@ -48,9 +52,21 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
 
     final wide = MediaQuery.sizeOf(context).width >= 800;
+    if (!wide && _index > 3) _index = 3;
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // The iPod page only exists on the desktop rail; on phones the index never
+    // reaches it.
+    final showIpod = wide && ipodSupported;
     final body = IndexedStack(
       index: _index,
-      children: const [QueueScreen(), PodcastsScreen(), InboxScreen(), SettingsScreen()],
+      children: [
+        const QueueScreen(),
+        const PodcastsScreen(),
+        const InboxScreen(),
+        const SettingsScreen(),
+        if (showIpod) const IpodScreen(),
+      ],
     );
 
     return Focus(
@@ -83,6 +99,12 @@ class _AppShellState extends ConsumerState<AppShell> {
                           selectedIcon: Icon(d.selected),
                           label: Text(d.label),
                         ),
+                      if (showIpod)
+                        const NavigationRailDestination(
+                          icon: Icon(Icons.usb_outlined),
+                          selectedIcon: Icon(Icons.usb_rounded),
+                          label: Text('iPod'),
+                        ),
                     ],
                   ),
                   const VerticalDivider(width: 1),
@@ -97,21 +119,37 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ],
               ),
             )
-          : Scaffold(
-              body: body,
-              bottomNavigationBar: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const MiniPlayer(),
-                  NavigationBar(
-                    selectedIndex: _index,
-                    onDestinationSelected: (i) => setState(() => _index = i),
-                    destinations: [
-                      for (final d in _destinations)
-                        NavigationDestination(icon: Icon(d.icon), selectedIcon: Icon(d.selected), label: d.label),
-                    ],
-                  ),
-                ],
+          : AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle(
+                systemNavigationBarColor: scheme.surfaceContainerLowest,
+                systemNavigationBarDividerColor: scheme.surfaceContainerLowest,
+                systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+              ),
+              child: Scaffold(
+                body: body,
+                bottomNavigationBar: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const MiniPlayer(),
+                    NavigationBar(
+                      selectedIndex: _index,
+                      onDestinationSelected: (i) => setState(() => _index = i),
+                      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                      height: 64,
+                      destinations: [
+                        for (final d in _destinations)
+                          NavigationDestination(
+                            icon: Icon(d.icon),
+                            selectedIcon: Icon(d.selected),
+                            label: d.short,
+                            tooltip: d.label,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
     );

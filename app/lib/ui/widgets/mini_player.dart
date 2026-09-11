@@ -5,6 +5,8 @@ import '../../playback/playback_controller.dart';
 import '../screens/now_playing_screen.dart';
 import 'artwork.dart';
 
+/// Persistent bar above the navigation: artwork, titles, transport. Phones get
+/// play/pause and +30 s only; wide layouts add rewind and a volume slider.
 class MiniPlayer extends ConsumerWidget {
   const MiniPlayer({super.key});
 
@@ -15,6 +17,7 @@ class MiniPlayer extends ConsumerWidget {
     if (ep == null || !s.hasItem) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final wide = MediaQuery.sizeOf(context).width >= 800;
     final total = s.duration;
     final frac = total > Duration.zero ? (s.position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0) : 0.0;
     final ctl = ref.read(playbackControllerProvider.notifier);
@@ -26,6 +29,7 @@ class MiniPlayer extends ConsumerWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.6)),
             SizedBox(
               height: 2,
               child: LinearProgressIndicator(
@@ -35,20 +39,23 @@ class MiniPlayer extends ConsumerWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+              padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
               child: Row(
                 children: [
-                  Artwork(url: ep.artworkUrl, size: 44, radius: 8),
+                  Artwork(url: ep.artworkUrl, size: 48, radius: 10),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(ep.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        Text(
+                          ep.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 1),
                         Row(
                           children: [
                             if (s.isSonos) ...[
@@ -68,26 +75,32 @@ class MiniPlayer extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Zurück',
-                    onPressed: ctl.skipBack,
-                    icon: const Icon(Icons.replay_10_rounded),
-                  ),
+                  if (wide)
+                    IconButton(
+                      tooltip: '10 Sekunden zurück',
+                      onPressed: ctl.skipBack,
+                      icon: const Icon(Icons.replay_10_rounded),
+                    ),
                   IconButton(
                     tooltip: s.isPlaying ? 'Pause' : 'Abspielen',
                     onPressed: ctl.togglePlay,
-                    iconSize: 36,
+                    iconSize: 40,
                     icon: s.isLoading
-                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
-                        : Icon(s.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-                            color: scheme.primary),
+                        ? const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5)),
+                          )
+                        : Icon(
+                            s.isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+                            color: scheme.primary,
+                          ),
                   ),
                   IconButton(
-                    tooltip: 'Vorwärts',
+                    tooltip: '30 Sekunden vor',
                     onPressed: ctl.skipForward,
                     icon: const Icon(Icons.forward_30_rounded),
                   ),
-                  if (s.targetSupportsVolume && MediaQuery.sizeOf(context).width >= 800) ...[
+                  if (s.targetSupportsVolume && wide) ...[
                     const SizedBox(width: 8),
                     Icon(
                       s.volume == 0
