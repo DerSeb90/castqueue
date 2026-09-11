@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "App (Windows): flutter run",
+      "type": "shell",
+      "command": "flutter run -d windows",
+      "options": { "cwd": "${workspaceFolder}/app" },
+      "problemMatcher": [],
+      "isBackground": true,
+      "presentation": { "panel": "dedicated", "reveal": "always" }
+    }
+  ]
+}

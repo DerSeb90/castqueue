@@ -21,7 +21,7 @@
       "name": "App (Windows)",
       "type": "dart",
       "request": "launch",
-      "program": "lib/main.dart",
+      "program": "${workspaceFolder}/app/lib/main.dart",
       "cwd": "${workspaceFolder}/app",
       "deviceId": "windows"
     },
@@ -29,7 +29,7 @@
       "name": "App (Android)",
       "type": "dart",
       "request": "launch",
-      "program": "lib/main.dart",
+      "program": "${workspaceFolder}/app/lib/main.dart",
       "cwd": "${workspaceFolder}/app"
     }
   ],
