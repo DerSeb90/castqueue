@@ -29,11 +29,34 @@ android {
         versionName = flutter.versionName
     }
 
+    // Release signing comes from the environment (CI decodes the keystore
+    // from a secret). Without CASTQUEUE_STORE_FILE the release build falls
+    // back to the debug key so a local `flutter build apk` keeps working;
+    // CASTQUEUE_REQUIRE_SIGNING=1 turns a missing keystore into a build error.
+    val releaseKeystorePath = System.getenv("CASTQUEUE_STORE_FILE")
+    val signingRequired = System.getenv("CASTQUEUE_REQUIRE_SIGNING") == "1"
+
+    signingConfigs {
+        create("release") {
+            if (!releaseKeystorePath.isNullOrBlank()) {
+                storeFile = file(releaseKeystorePath)
+                storePassword = System.getenv("CASTQUEUE_STORE_PASSWORD")
+                keyAlias = System.getenv("CASTQUEUE_KEY_ALIAS")
+                keyPassword = System.getenv("CASTQUEUE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            require(!signingRequired || !releaseKeystorePath.isNullOrBlank()) {
+                "CASTQUEUE_STORE_FILE is required for a signed release build"
+            }
+            signingConfig = if (releaseKeystorePath.isNullOrBlank()) {
+                signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.getByName("release")
+            }
         }
     }
 }

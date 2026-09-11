@@ -14,6 +14,8 @@ app/*.iml
 app/android/.gradle/
 app/android/local.properties
 app/android/key.properties
+app/android/castqueue-release.jks
+*.jks
 app/android/app/.cxx/
 app/windows/flutter/ephemeral/
 app/windows/flutter/generated_plugin_registrant.*
