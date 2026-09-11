@@ -5,7 +5,7 @@ eine Flutter-App für Windows (Stream only) und Android (mit Downloads), Web-UI 
 Verwalten der Abos, Wiedergabe auf Sonos im LAN. Kein gpodder/Nextcloud.
 
 ```
-podcastclient-win/
+castqueue/
 ├── docs/            API.md (Vertrag), ARCHITECTURE.md
 ├── server/          Go: API + Feed-Refresh + Stream-Proxy + eingebettete Web-UI
 │   ├── cmd/castqueue/main.go

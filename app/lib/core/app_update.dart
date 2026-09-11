@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 /// Where the app is published. The releases of this repository carry one
 /// signed APK per ABI, and GitHub records a SHA-256 digest for each asset.
-const String kUpdateRepository = 'DerSeb90/podcastclient-win';
+const String kUpdateRepository = 'DerSeb90/castqueue';
 
 /// Names the Flutter build gives its release APKs: `app-<abi>-release.apk`
 /// per ABI, or `app-release.apk` for a universal build. Anything else in a

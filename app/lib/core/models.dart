@@ -486,6 +486,7 @@ class MeInfo {
     required this.streamToken,
     required this.publicUrl,
     this.serverTime,
+    this.serverVersion = '',
   });
   final String username;
   final String deviceId;
@@ -493,6 +494,7 @@ class MeInfo {
   final String streamToken;
   final String publicUrl;
   final DateTime? serverTime;
+  final String serverVersion;
 
   factory MeInfo.fromJson(Map<String, dynamic> j) => MeInfo(
         username: _str(j['username']),
@@ -501,6 +503,7 @@ class MeInfo {
         streamToken: _str(j['stream_token']),
         publicUrl: _str(j['public_url']),
         serverTime: _dt(j['server_time']),
+        serverVersion: _str(j['server_version']),
       );
 }
 

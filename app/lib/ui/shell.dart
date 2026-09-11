@@ -12,6 +12,7 @@ import 'screens/podcasts_screen.dart';
 import 'screens/queue_screen.dart';
 import 'screens/settings_screen.dart';
 import 'widgets/mini_player.dart';
+import 'widgets/version_badge.dart';
 
 /// Responsive shell: NavigationRail (≥ 800 px) or bottom NavigationBar, with
 /// the persistent mini player.
@@ -91,6 +92,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                         ),
                         child: Icon(Icons.queue_music_rounded, color: Theme.of(context).colorScheme.onPrimary),
                       ),
+                    ),
+                    trailing: const Expanded(
+                      child: Align(alignment: Alignment.bottomCenter, child: VersionBadge()),
                     ),
                     destinations: [
                       for (final d in _destinations)

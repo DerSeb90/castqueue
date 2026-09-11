@@ -113,6 +113,9 @@ func Parse(body []byte) (Result, error) {
 		if p.Description == "" && feed.ITunesExt.Summary != "" {
 			p.Description = feed.ITunesExt.Summary
 		}
+		if p.Description == "" && feed.ITunesExt.Subtitle != "" {
+			p.Description = feed.ITunesExt.Subtitle
+		}
 		p.Categories = mergeCategories(feed.Categories, feed.ITunesExt.Categories)
 		p.Explicit = isExplicit(feed.ITunesExt.Explicit)
 		p.PodcastType = normalizePodcastType(feed.ITunesExt.Type)
@@ -168,8 +171,11 @@ func toEpisode(it *gofeed.Item) (store.NewEpisode, bool) {
 			e.ImageURL = it.ITunesExt.Image
 		}
 		e.DurationMs = parseDuration(it.ITunesExt.Duration)
-		if e.Description == "" {
+		if strings.TrimSpace(e.Description) == "" {
 			e.Description = it.ITunesExt.Summary
+		}
+		if strings.TrimSpace(e.Description) == "" {
+			e.Description = it.ITunesExt.Subtitle
 		}
 		e.Season = parseSmallInt(it.ITunesExt.Season)
 		e.EpisodeNumber = parseSmallInt(it.ITunesExt.Episode)

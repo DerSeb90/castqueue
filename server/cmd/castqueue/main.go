@@ -57,7 +57,7 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
-		log.Info("listening", "addr", cfg.Listen, "public_url", cfg.PublicURL)
+		log.Info("listening", "addr", cfg.Listen, "public_url", cfg.PublicURL, "version", api.Version)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http", "err", err)
 			stop()

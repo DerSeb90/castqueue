@@ -62,6 +62,7 @@
     const [podcasts, queue, settings, me] = await Promise.all([api('GET', '/api/podcasts'), api('GET', '/api/queue'), api('GET', '/api/settings'), api('GET', '/api/me')]);
     S.podcasts = podcasts; S.queue = queue; S.settings = settings; S.me = me; rememberEpisodes(queue.items);
     $('#queue-count').textContent = queue.items.length || '';
+    $('#version').textContent = 'CastQueue ' + (me.server_version || '');
   }
   async function reloadQueue(q, { rerender = true } = {}) {
     S.queue = q || await api('GET', '/api/queue'); rememberEpisodes(S.queue.items);
@@ -301,6 +302,7 @@
     main.append(el('div', { class: 'card form' },
       el('div', {}, el('span', { class: 'muted' }, 'Öffentliche URL: '), S.me.public_url),
       el('div', {}, el('span', { class: 'muted' }, 'Benutzer: '), S.me.username),
+      el('div', {}, el('span', { class: 'muted' }, 'Server-Version: '), S.me.server_version || 'unbekannt'),
       el('div', { class: 'row' },
         el('a', { class: 'btn small', href: '/api/opml' }, 'OPML exportieren'),
         el('button', { class: 'btn small', onclick: async () => { if (confirm('Stream-Token erneuern? Alle bisherigen Premium-Stream-Links werden ungültig; Apps holen sich automatisch neue.')) { await api('POST', '/api/stream-token/rotate'); toast('Stream-Token erneuert'); } } }, 'Stream-Token erneuern'))));

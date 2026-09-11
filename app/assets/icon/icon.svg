@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- CastQueue icon: three queue bars + play triangle. Glyph box 635px centered. -->
+  <rect width="1024" height="1024" rx="225" fill="#0E0E10"/>
+  <g fill="#F5A524" transform="translate(194.5 194.5) scale(635)">
+    <rect x="0.04" y="0.06" width="0.58" height="0.115" rx="0.0575"/>
+    <rect x="0.04" y="0.25" width="0.46" height="0.115" rx="0.0575"/>
+    <rect x="0.04" y="0.44" width="0.34" height="0.115" rx="0.0575"/>
+    <path stroke="#F5A524" stroke-width="0.12" stroke-linejoin="round"
+          d="M0.52 0.52 L0.94 0.72 L0.52 0.92 Z"/>
+  </g>
+</svg>

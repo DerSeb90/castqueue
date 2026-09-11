@@ -21,10 +21,10 @@ import (
 	"github.com/sebseifert/castqueue/internal/store"
 )
 
-const (
-	sessionCookie = "cq_session"
-	Version       = "1.0.0"
-)
+const sessionCookie = "cq_session"
+
+// Version is set at build time via -ldflags "-X .../internal/api.Version=v1.2.3".
+var Version = "dev"
 
 type Server struct {
 	cfg     config.Config
@@ -338,6 +338,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"username": s.cfg.Username, "device_id": d.ID, "device_name": d.Name,
 		"stream_token": st, "server_time": store.Now().Format(time.RFC3339Nano), "public_url": s.cfg.PublicURL,
+		"server_version": Version,
 	})
 }
 

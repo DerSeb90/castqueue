@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_update.dart';
@@ -13,12 +12,12 @@ import '../../state/app_state.dart';
 import '../../state/library.dart';
 import '../format.dart';
 import '../widgets/app_update_flow.dart';
+import '../widgets/version_badge.dart';
 import 'devices_screen.dart';
 import 'ipod_screen.dart';
 
 const _kRepoUrl = 'https://github.com/$kUpdateRepository';
 
-final packageInfoProvider = FutureProvider<PackageInfo>((_) => PackageInfo.fromPlatform());
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -108,6 +107,7 @@ class SettingsScreen extends ConsumerWidget {
     final prefs = ref.watch(appPrefsProvider);
     final lib = ref.watch(libraryProvider);
     final pkg = ref.watch(packageInfoProvider);
+    final server = ref.watch(serverInfoProvider);
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
 
@@ -127,7 +127,10 @@ class SettingsScreen extends ConsumerWidget {
         );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Einstellungen')),
+      appBar: AppBar(
+        title: const Text('Einstellungen'),
+        actions: const [Padding(padding: EdgeInsets.only(right: 8), child: Center(child: VersionBadge(alignEnd: true)))],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 760),
@@ -308,6 +311,18 @@ class SettingsScreen extends ConsumerWidget {
                     loading: () => '…',
                     error: (_, _) => 'unbekannt',
                   )),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.dns_outlined),
+                  title: const Text('Server'),
+                  subtitle: Text(server.when(
+                    data: (m) => m == null
+                        ? 'nicht verbunden'
+                        : '${m.serverVersion.isEmpty ? 'Version unbekannt' : m.serverVersion} · ${m.publicUrl}',
+                    loading: () => '…',
+                    error: (_, _) => 'nicht erreichbar',
+                  )),
+                  onTap: () => ref.invalidate(serverInfoProvider),
                 ),
                 ListTile(
                   leading: const Icon(Icons.system_update_alt_rounded),

@@ -9,7 +9,7 @@ const _sha = '497df04a44a36054fe9fa78eabb43c1ce887ced6fcfb1e0cff5215b11153f431';
 
 Map<String, dynamic> _release(String tag, {bool withDigest = true}) => {
       'tag_name': tag,
-      'html_url': 'https://github.com/DerSeb90/podcastclient-win/releases/tag/$tag',
+      'html_url': 'https://github.com/DerSeb90/castqueue/releases/tag/$tag',
       'body': 'Player poliert.',
       'published_at': '2026-09-11T07:00:00Z',
       'assets': [
@@ -18,7 +18,7 @@ Map<String, dynamic> _release(String tag, {bool withDigest = true}) => {
             'name': 'app-$abi-release.apk',
             'size': 18917885,
             'browser_download_url':
-                'https://github.com/DerSeb90/podcastclient-win/releases/download/$tag/app-$abi-release.apk',
+                'https://github.com/DerSeb90/castqueue/releases/download/$tag/app-$abi-release.apk',
             if (withDigest) 'digest': 'sha256:$_sha',
           },
       ],
@@ -34,7 +34,7 @@ AppUpdateService _service(
     AppUpdateService(
       client: MockClient((request) async {
         expect(request.url.host, 'api.github.com');
-        expect(request.url.path, '/repos/DerSeb90/podcastclient-win/releases/latest');
+        expect(request.url.path, '/repos/DerSeb90/castqueue/releases/latest');
         return http.Response(jsonEncode(body), status);
       }),
       abi: abi,
@@ -99,7 +99,7 @@ void main() {
           'name': 'app-release.apk',
           'size': 40000000,
           'browser_download_url':
-              'https://github.com/DerSeb90/podcastclient-win/releases/download/v0.1.1/app-release.apk',
+              'https://github.com/DerSeb90/castqueue/releases/download/v0.1.1/app-release.apk',
           'digest': 'sha256:$_sha',
         },
       ];

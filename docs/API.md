@@ -37,7 +37,8 @@ Rate limited: 5 failures / 15 min per IP → 429.
 ### `GET /api/me`
 ```json
 { "username": "seb", "device_id": "…", "device_name": "Windows PC",
-  "stream_token": "…", "server_time": "…", "public_url": "https://pods.example.com" }
+  "stream_token": "…", "server_time": "…", "public_url": "https://pods.example.com",
+  "server_version": "v0.1.0" }
 ```
 
 ### `GET /api/devices` → `[{ "id", "name", "created_at", "last_seen_at", "current": bool }]`
