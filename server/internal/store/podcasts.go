@@ -9,19 +9,23 @@ import (
 
 const podcastCols = `p.id, p.feed_url, p.title, p.description, p.author, p.image_url, p.website,
  p.auto_enqueue, p.auth_username, p.auth_password, p.last_refreshed_at, p.last_error, p.etag, p.last_modified,
+ p.language, p.copyright, p.categories, p.explicit, p.podcast_type, p.owner_name,
  (SELECT COUNT(*) FROM episodes e WHERE e.podcast_id = p.id), p.created_at, p.updated_at`
 
 func scanPodcast(row interface{ Scan(...any) error }) (Podcast, error) {
 	var p Podcast
-	var autoEnq int
-	var refreshed, created, updated string
+	var autoEnq, explicit int
+	var refreshed, created, updated, cats string
 	err := row.Scan(&p.ID, &p.FeedURL, &p.Title, &p.Description, &p.Author, &p.ImageURL, &p.Website,
 		&autoEnq, &p.AuthUsername, &p.AuthPassword, &refreshed, &p.LastError, &p.ETag, &p.LastModified,
+		&p.Language, &p.Copyright, &cats, &explicit, &p.PodcastType, &p.OwnerName,
 		&p.EpisodeCount, &created, &updated)
 	if err != nil {
 		return p, err
 	}
 	p.AutoEnqueue = autoEnq == 1
+	p.Explicit = explicit == 1
+	p.Categories = categoriesFromJSON(cats)
 	p.LastRefreshedAt, _ = ParseTime(refreshed)
 	p.CreatedAt, _ = ParseTime(created)
 	p.UpdatedAt, _ = ParseTime(updated)
@@ -74,10 +78,13 @@ func (s *Store) CreatePodcast(ctx context.Context, p *Podcast, episodes []NewEpi
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO podcasts
 			(id, feed_url, title, description, author, image_url, website, auto_enqueue, auth_username, auth_password,
-			 last_refreshed_at, last_error, etag, last_modified, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			 last_refreshed_at, last_error, etag, last_modified, language, copyright, categories, explicit, podcast_type, owner_name,
+			 created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			p.ID, p.FeedURL, p.Title, p.Description, p.Author, p.ImageURL, p.Website, boolInt(p.AutoEnqueue),
-			p.AuthUsername, p.AuthPassword, FormatTime(now), "", p.ETag, p.LastModified, FormatTime(now), FormatTime(now))
+			p.AuthUsername, p.AuthPassword, FormatTime(now), "", p.ETag, p.LastModified,
+			p.Language, p.Copyright, categoriesToJSON(p.Categories), boolInt(p.Explicit), p.PodcastType, p.OwnerName,
+			FormatTime(now), FormatTime(now))
 		if err != nil {
 			return wrap("insert podcast", err)
 		}
@@ -98,8 +105,12 @@ func (s *Store) ApplyRefresh(ctx context.Context, p Podcast, episodes []NewEpiso
 			return wrap("update podcast error", err)
 		}
 		_, err := tx.ExecContext(ctx, `UPDATE podcasts SET title = ?, description = ?, author = ?, image_url = ?, website = ?,
-			last_refreshed_at = ?, last_error = '', etag = ?, last_modified = ?, updated_at = ? WHERE id = ?`,
-			p.Title, p.Description, p.Author, p.ImageURL, p.Website, FormatTime(now), p.ETag, p.LastModified, FormatTime(now), p.ID)
+			last_refreshed_at = ?, last_error = '', etag = ?, last_modified = ?,
+			language = ?, copyright = ?, categories = ?, explicit = ?, podcast_type = ?, owner_name = ?,
+			updated_at = ? WHERE id = ?`,
+			p.Title, p.Description, p.Author, p.ImageURL, p.Website, FormatTime(now), p.ETag, p.LastModified,
+			p.Language, p.Copyright, categoriesToJSON(p.Categories), boolInt(p.Explicit), p.PodcastType, p.OwnerName,
+			FormatTime(now), p.ID)
 		if err != nil {
 			return wrap("update podcast", err)
 		}
@@ -227,10 +238,12 @@ func (s *Store) upsertEpisodes(ctx context.Context, tx *sql.Tx, podcastID string
 			id := NewID()
 			_, err := tx.ExecContext(ctx, `INSERT INTO episodes
 				(id, podcast_id, guid, title, description, link, image_url, media_url, media_type, media_size, duration_ms,
-				 published_at, position_ms, played, progress_updated_at, created_at, updated_at)
-				VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,0,'',?,?)`,
+				 published_at, season, episode_number, episode_type, explicit, author,
+				 position_ms, played, progress_updated_at, created_at, updated_at)
+				VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,'',?,?)`,
 				id, podcastID, e.GUID, e.Title, e.Description, e.Link, e.ImageURL, e.MediaURL, e.MediaType, e.MediaSize, e.DurationMs,
-				FormatTime(e.PublishedAt), FormatTime(now), FormatTime(now))
+				FormatTime(e.PublishedAt), e.Season, e.EpisodeNumber, e.EpisodeType, boolInt(e.Explicit), e.Author,
+				FormatTime(now), FormatTime(now))
 			if err != nil {
 				return nil, wrap("insert episode", err)
 			}
@@ -240,12 +253,15 @@ func (s *Store) upsertEpisodes(ctx context.Context, tx *sql.Tx, podcastID string
 		default:
 			// update metadata only if something changed (avoid bumping updated_at needlessly)
 			res, err := tx.ExecContext(ctx, `UPDATE episodes SET title = ?, description = ?, link = ?, image_url = ?, media_url = ?,
-				media_type = ?, media_size = ?, duration_ms = CASE WHEN ? > 0 THEN ? ELSE duration_ms END, published_at = ?, updated_at = ?
+				media_type = ?, media_size = ?, duration_ms = CASE WHEN ? > 0 THEN ? ELSE duration_ms END, published_at = ?,
+				season = ?, episode_number = ?, episode_type = ?, explicit = ?, author = ?, updated_at = ?
 				WHERE id = ? AND (title != ? OR description != ? OR link != ? OR image_url != ? OR media_url != ? OR media_type != ?
-				  OR media_size != ? OR (? > 0 AND duration_ms != ?) OR published_at != ?)`,
+				  OR media_size != ? OR (? > 0 AND duration_ms != ?) OR published_at != ?
+				  OR season != ? OR episode_number != ? OR episode_type != ? OR explicit != ? OR author != ?)`,
 				e.Title, e.Description, e.Link, e.ImageURL, e.MediaURL, e.MediaType, e.MediaSize, e.DurationMs, e.DurationMs,
-				FormatTime(e.PublishedAt), FormatTime(now), existing,
-				e.Title, e.Description, e.Link, e.ImageURL, e.MediaURL, e.MediaType, e.MediaSize, e.DurationMs, e.DurationMs, FormatTime(e.PublishedAt))
+				FormatTime(e.PublishedAt), e.Season, e.EpisodeNumber, e.EpisodeType, boolInt(e.Explicit), e.Author, FormatTime(now), existing,
+				e.Title, e.Description, e.Link, e.ImageURL, e.MediaURL, e.MediaType, e.MediaSize, e.DurationMs, e.DurationMs, FormatTime(e.PublishedAt),
+				e.Season, e.EpisodeNumber, e.EpisodeType, boolInt(e.Explicit), e.Author)
 			if err != nil {
 				return nil, wrap("update episode", err)
 			}
@@ -257,21 +273,24 @@ func (s *Store) upsertEpisodes(ctx context.Context, tx *sql.Tx, podcastID string
 
 const episodeCols = `e.id, e.podcast_id, p.title, p.image_url, (p.auth_username != '' OR p.auth_password != ''),
  e.guid, e.title, e.description, e.link, e.image_url, e.media_url, e.media_type, e.media_size, e.duration_ms, e.published_at,
+ e.season, e.episode_number, e.episode_type, e.explicit, e.author,
  e.position_ms, e.played, e.progress_updated_at, (q.episode_id IS NOT NULL), e.created_at, e.updated_at`
 
 const episodeFrom = ` FROM episodes e JOIN podcasts p ON p.id = e.podcast_id LEFT JOIN queue q ON q.episode_id = e.id `
 
 func scanEpisode(row interface{ Scan(...any) error }) (Episode, error) {
 	var e Episode
-	var hasAuth, played, inQueue int
+	var hasAuth, played, inQueue, explicit int
 	var published, progressUpd, created, updated string
 	err := row.Scan(&e.ID, &e.PodcastID, &e.PodcastTitle, &e.PodcastImageURL, &hasAuth,
 		&e.GUID, &e.Title, &e.Description, &e.Link, &e.ImageURL, &e.MediaURL, &e.MediaType, &e.MediaSize, &e.DurationMs, &published,
+		&e.Season, &e.EpisodeNumber, &e.EpisodeType, &explicit, &e.Author,
 		&e.PositionMs, &played, &progressUpd, &inQueue, &created, &updated)
 	if err != nil {
 		return e, err
 	}
 	e.PodcastHasAuth = hasAuth == 1
+	e.Explicit = explicit == 1
 	e.Played = played == 1
 	e.InQueue = inQueue == 1
 	e.PublishedAt, _ = ParseTime(published)

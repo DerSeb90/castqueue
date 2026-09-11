@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/models.dart';
 import '../../downloads/download_manager.dart';
 import '../../playback/playback_controller.dart';
 import '../../state/library.dart';
 import '../format.dart';
 import '../widgets/artwork.dart';
 import '../widgets/episode_tile.dart';
+import '../widgets/meta_row.dart';
 import 'podcast_detail_screen.dart';
 
 class EpisodeScreen extends ConsumerWidget {
@@ -27,11 +29,17 @@ class EpisodeScreen extends ConsumerWidget {
     final isPlaying = playing && ref.watch(playbackControllerProvider.select((s) => s.isPlaying));
     final dl = ref.watch(downloadManagerProvider);
 
+    final se = [
+      if (e.season > 0) 'Staffel ${e.season}',
+      if (e.episodeNumber > 0) 'Folge ${e.episodeNumber}',
+    ].join(' · ');
     final meta = [
+      if (se.isNotEmpty) se,
       if (e.publishedAt != null) formatDate(e.publishedAt),
       if (e.durationMs > 0) formatDurationShort(e.duration),
       if (e.mediaSize > 0) formatBytes(e.mediaSize),
     ].join(' · ');
+    final typeLabel = e.episodeType == 'full' ? '' : episodeTypeLabel(e.episodeType);
 
     return Scaffold(
       appBar: AppBar(
@@ -65,8 +73,27 @@ class EpisodeScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(e.title, style: text.headlineSmall),
+                        if (e.author.isNotEmpty && e.author != e.podcastTitle)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(e.author, style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                          ),
                         const SizedBox(height: 6),
                         Text(meta, style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                        if (typeLabel.isNotEmpty || e.explicit)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 6),
+                            child: Wrap(
+                              spacing: 6,
+                              children: [
+                                if (typeLabel.isNotEmpty)
+                                  MetaBadge(typeLabel,
+                                      icon: e.episodeType == 'trailer' ? Icons.movie_outlined : Icons.star_outline_rounded,
+                                      color: scheme.primary),
+                                if (e.explicit) const MetaBadge('Explicit', icon: Icons.explicit_rounded),
+                              ],
+                            ),
+                          ),
                         if (e.played)
                           Padding(
                             padding: const EdgeInsets.only(top: 6),
@@ -158,8 +185,61 @@ class EpisodeScreen extends ConsumerWidget {
                   label: const Text('Episode im Browser öffnen'),
                 ),
               ],
+              const SizedBox(height: 16),
+              _EpisodeDetails(episode: e),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Collapsed technical details: media type/size, media URL, GUID, link.
+class _EpisodeDetails extends StatelessWidget {
+  const _EpisodeDetails({required this.episode});
+  final Episode episode;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = episode;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final media = [
+      if (e.mediaType.isNotEmpty) e.mediaType,
+      if (e.mediaSize > 0) formatBytes(e.mediaSize),
+    ].join(' · ');
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          title: Text('Details', style: text.titleSmall?.copyWith(color: scheme.onSurfaceVariant)),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.only(bottom: 8),
+          children: [
+            if (e.publishedAt != null)
+              MetaRow(label: 'Veröffentlicht', value: formatDateTime(e.publishedAt), icon: Icons.event_rounded),
+            if (e.durationMs > 0)
+              MetaRow(label: 'Dauer', value: formatDuration(e.duration), icon: Icons.timer_outlined),
+            if (e.season > 0) MetaRow(label: 'Staffel', value: '${e.season}', icon: Icons.layers_outlined),
+            if (e.episodeNumber > 0)
+              MetaRow(label: 'Folge Nr.', value: '${e.episodeNumber}', icon: Icons.tag_rounded),
+            if (episodeTypeLabel(e.episodeType).isNotEmpty)
+              MetaRow(label: 'Typ', value: episodeTypeLabel(e.episodeType), icon: Icons.label_outline_rounded),
+            if (e.author.isNotEmpty) MetaRow(label: 'Autor', value: e.author, icon: Icons.person_outline_rounded),
+            if (media.isNotEmpty) MetaRow(label: 'Medium', value: media, icon: Icons.audio_file_outlined),
+            if (e.mediaUrl.isNotEmpty)
+              MetaRow(label: 'Media-URL', value: e.mediaUrl, icon: Icons.link_rounded, copyable: true, mono: true),
+            if (e.guid.isNotEmpty) MetaRow(label: 'GUID', value: e.guid, icon: Icons.fingerprint_rounded, copyable: true, mono: true),
+            if (e.link.isNotEmpty)
+              MetaRow(
+                label: 'Link',
+                value: e.link,
+                icon: Icons.open_in_new_rounded,
+                onTap: () => launchUrl(Uri.parse(e.link), mode: LaunchMode.externalApplication),
+              ),
+          ],
         ),
       ),
     );

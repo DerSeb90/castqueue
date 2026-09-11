@@ -261,7 +261,7 @@
         if (!res.length) results.append(el('div', { class: 'muted' }, 'Nichts gefunden.'));
         for (const r of res) {
           const subscribed = S.podcasts.find(p => p.feed_url === r.feed_url);
-          results.append(el('div', { class: 'result' }, el('img', { src: r.image_url, alt: '' }), el('div', {}, el('div', { class: 't' }, r.title), el('div', { class: 's' }, r.author)),
+          results.append(el('div', { class: 'result' }, el('img', { src: r.image_url, alt: '' }), el('div', {}, el('div', { class: 't' }, r.title), el('div', { class: 's' }, r.author), el('div', { class: 'muted', style: 'font-size:11px;word-break:break-all', title: r.feed_url }, r.feed_url)),
             subscribed ? el('a', { class: 'btn small', href: '#/podcast/' + subscribed.id }, 'Abonniert') :
               el('button', { class: 'btn small primary', onclick: async (e) => { e.target.disabled = true; try { const p = await api('POST', '/api/podcasts', { feed_url: r.feed_url }); toast(`„${p.title}“ abonniert`); await loadCore(); go('#/podcast/' + p.id); } catch (ex) { toast(ex.message, true); e.target.disabled = false; } } }, 'Abonnieren')));
         }

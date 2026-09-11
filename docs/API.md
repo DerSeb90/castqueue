@@ -59,6 +59,12 @@ Invalidates all previously issued `stream_url`s.
   "has_auth": false,             // feed uses HTTP basic auth (credentials never returned)
   "episode_count": 123,
   "last_refreshed_at": "…", "last_error": "",
+  "language": "de-DE",           // <language> (may be empty)
+  "copyright": "…",
+  "categories": ["Technology", "Tech News"],  // iTunes categories incl. subcategories + plain <category>; never null
+  "explicit": false,             // <itunes:explicit>
+  "podcast_type": "episodic",    // "episodic" | "serial" | ""
+  "owner_name": "…",             // <itunes:owner><itunes:name>
   "created_at": "…", "updated_at": "…"
 }
 ```
@@ -74,6 +80,10 @@ Invalidates all previously issued `stream_url`s.
   "media_type": "audio/mpeg", "media_size": 12345678,
   "duration_ms": 3600000,
   "published_at": "…",
+  "season": 2, "episode_number": 14,   // <itunes:season>/<itunes:episode>, 0 if absent
+  "episode_type": "full",              // "full" | "trailer" | "bonus" | ""
+  "explicit": false,
+  "author": "…",                       // <itunes:author> of the item (else first <author>)
   "position_ms": 0, "played": false, "progress_updated_at": "…",
   "in_queue": false,
   "updated_at": "…"                     // bumps on any change incl. progress
@@ -115,8 +125,15 @@ replace the whole order must send the version they based it on.
 - `POST /api/podcasts/{id}/refresh` → `Podcast` (synchronous refresh)
 - `POST /api/podcasts/refresh` → `{ "refreshed": n, "errors": n }` (all, synchronous)
 - `GET /api/podcasts/{id}/episodes?limit=50&offset=0` → `[Episode]` newest first
-- `GET /api/search?q=term` → `[{ "title", "author", "feed_url", "image_url" }]`
-  (proxied iTunes Search API, max 25)
+- `GET /api/search?q=term` (proxied iTunes Search API, max 25) →
+  ```json
+  [{ "title", "author", "feed_url", "image_url",
+     "genres": ["Technology", …],       // iTunes genres without the generic "Podcasts"
+     "episode_count": 123,              // trackCount
+     "latest_release_at": "…",          // RFC3339 or ""
+     "itunes_url": "https://podcasts.apple.com/…",
+     "explicit": false, "country": "DEU" }]
+  ```
 - `GET /api/opml` → `application/xml` OPML export
 - `POST /api/opml` (body: raw OPML xml, `Content-Type: text/xml`) → `{ "added": n, "skipped": n, "failed": [feed_url…] }`
 

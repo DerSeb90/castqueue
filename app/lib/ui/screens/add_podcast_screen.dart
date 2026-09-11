@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models.dart';
 import '../../state/app_state.dart';
 import '../../state/library.dart';
 import '../format.dart';
 import '../widgets/artwork.dart';
+import '../widgets/meta_row.dart';
 import 'podcast_detail_screen.dart';
 
 class AddPodcastScreen extends ConsumerStatefulWidget {
@@ -112,19 +114,11 @@ class _AddPodcastScreenState extends ConsumerState<AddPodcastScreen> {
               ),
               const SizedBox(height: 8),
               for (final r in _results)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: Artwork(url: r.imageUrl, size: 48, radius: 8),
-                    title: Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text(r.author, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    trailing: subscribed.contains(r.feedUrl)
-                        ? Icon(Icons.check_circle_rounded, color: scheme.primary)
-                        : FilledButton.tonal(
-                            onPressed: _adding ? null : () => _add(r.feedUrl),
-                            child: const Text('Abonnieren'),
-                          ),
-                  ),
+                _SearchResultCard(
+                  result: r,
+                  subscribed: subscribed.contains(r.feedUrl),
+                  busy: _adding,
+                  onAdd: () => _add(r.feedUrl),
                 ),
               const SizedBox(height: 24),
               Text('Per Feed-URL', style: text.titleMedium),
@@ -164,6 +158,258 @@ class _AddPodcastScreenState extends ConsumerState<AddPodcastScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// One iTunes hit: artwork, title, author, genre/count/date line and the RSS
+/// feed URL (tap = copy). The info button opens the full metadata sheet.
+class _SearchResultCard extends StatelessWidget {
+  const _SearchResultCard({
+    required this.result,
+    required this.subscribed,
+    required this.busy,
+    required this.onAdd,
+  });
+
+  final SearchResult result;
+  final bool subscribed;
+  final bool busy;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final r = result;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final facts = <String>[
+      if (r.genres.isNotEmpty) r.genres.take(2).join(', '),
+      if (r.episodeCount > 0) '${r.episodeCount} Folgen',
+      if (r.latestReleaseAt != null) formatDate(r.latestReleaseAt),
+    ];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _showDetails(context),
+        onLongPress: () => _showDetails(context),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Artwork(url: r.imageUrl, size: 56, radius: 10),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(r.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+                        ),
+                        if (r.explicit) ...[
+                          const SizedBox(width: 6),
+                          const MetaBadge('E'),
+                        ],
+                      ],
+                    ),
+                    if (r.author.isNotEmpty)
+                      Text(r.author,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodySmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w600)),
+                    if (facts.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(facts.join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                      ),
+                    const SizedBox(height: 4),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => copyToClipboard(context, r.feedUrl, what: 'Feed-URL kopiert'),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Icon(Icons.rss_feed_rounded, size: 13, color: scheme.onSurfaceVariant),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                _shortFeed(r.feedUrl),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: text.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                  fontFamily: 'Consolas',
+                                  fontFamilyFallback: const ['Roboto Mono', 'monospace'],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Column(
+                children: [
+                  if (subscribed)
+                    Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(Icons.check_circle_rounded, color: scheme.primary),
+                    )
+                  else
+                    FilledButton.tonal(
+                      onPressed: busy ? null : onAdd,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: const Text('Abonnieren'),
+                    ),
+                  IconButton(
+                    tooltip: 'Details',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _showDetails(context),
+                    icon: Icon(Icons.info_outline_rounded, size: 20, color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _shortFeed(String url) {
+    final u = Uri.tryParse(url);
+    if (u == null || u.host.isEmpty) return url;
+    final path = u.path == '/' ? '' : u.path;
+    return '${u.host}$path${u.hasQuery ? '?…' : ''}';
+  }
+
+  Future<void> _showDetails(BuildContext context) {
+    final r = result;
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        final text = Theme.of(ctx).textTheme;
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Artwork(url: r.imageUrl, size: 72, radius: 12),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(r.title, style: text.titleLarge),
+                          if (r.author.isNotEmpty)
+                            Text(r.author, style: text.bodyMedium?.copyWith(color: scheme.primary)),
+                          if (r.explicit)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: MetaBadge('Explicit', icon: Icons.explicit_rounded),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text('RSS-Feed', style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 4),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainer,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: SelectableText(
+                    r.feedUrl,
+                    style: text.bodySmall?.copyWith(
+                      fontFamily: 'Consolas',
+                      fontFamilyFallback: const ['Roboto Mono', 'monospace'],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => copyToClipboard(ctx, r.feedUrl, what: 'Feed-URL kopiert'),
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Feed-URL kopieren'),
+                    ),
+                    if (r.itunesUrl.isNotEmpty)
+                      OutlinedButton.icon(
+                        onPressed: () => launchUrl(Uri.parse(r.itunesUrl), mode: LaunchMode.externalApplication),
+                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                        label: const Text('Apple Podcasts'),
+                      ),
+                    if (!subscribed)
+                      FilledButton.icon(
+                        onPressed: busy
+                            ? null
+                            : () {
+                                Navigator.pop(ctx);
+                                onAdd();
+                              },
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Abonnieren'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      children: [
+                        if (r.genres.isNotEmpty) MetaChips(label: 'Genres', values: r.genres, icon: Icons.category_outlined),
+                        if (r.episodeCount > 0)
+                          MetaRow(label: 'Folgen', value: '${r.episodeCount}', icon: Icons.format_list_numbered_rounded),
+                        if (r.latestReleaseAt != null)
+                          MetaRow(
+                              label: 'Letzte Folge',
+                              value: formatDateTime(r.latestReleaseAt),
+                              icon: Icons.schedule_rounded),
+                        if (r.country.isNotEmpty) MetaRow(label: 'Land', value: r.country, icon: Icons.public_rounded),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

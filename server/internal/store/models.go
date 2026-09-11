@@ -17,6 +17,12 @@ type Podcast struct {
 	LastError       string
 	ETag            string
 	LastModified    string
+	Language        string
+	Copyright       string
+	Categories      []string
+	Explicit        bool
+	PodcastType     string // "episodic", "serial" or ""
+	OwnerName       string
 	EpisodeCount    int
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -40,6 +46,11 @@ type Episode struct {
 	MediaSize         int64
 	DurationMs        int64
 	PublishedAt       time.Time
+	Season            int
+	EpisodeNumber     int
+	EpisodeType       string // "full", "trailer", "bonus" or ""
+	Explicit          bool
+	Author            string
 	PositionMs        int64
 	Played            bool
 	ProgressUpdatedAt time.Time
@@ -50,16 +61,21 @@ type Episode struct {
 
 // NewEpisode is what the feed parser produces.
 type NewEpisode struct {
-	GUID        string
-	Title       string
-	Description string
-	Link        string
-	ImageURL    string
-	MediaURL    string
-	MediaType   string
-	MediaSize   int64
-	DurationMs  int64
-	PublishedAt time.Time
+	GUID          string
+	Title         string
+	Description   string
+	Link          string
+	ImageURL      string
+	MediaURL      string
+	MediaType     string
+	MediaSize     int64
+	DurationMs    int64
+	PublishedAt   time.Time
+	Season        int
+	EpisodeNumber int
+	EpisodeType   string
+	Explicit      bool
+	Author        string
 }
 
 type Queue struct {

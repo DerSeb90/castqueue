@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -61,8 +62,82 @@ func OpenMemory() (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) migrate() error {
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+	// Columns added after the first release. ADD COLUMN has no IF NOT EXISTS
+	// in SQLite, so check table_info first.
+	type col struct{ table, name, def string }
+	added := []col{
+		{"podcasts", "language", "TEXT NOT NULL DEFAULT ''"},
+		{"podcasts", "copyright", "TEXT NOT NULL DEFAULT ''"},
+		{"podcasts", "categories", "TEXT NOT NULL DEFAULT ''"},
+		{"podcasts", "explicit", "INTEGER NOT NULL DEFAULT 0"},
+		{"podcasts", "podcast_type", "TEXT NOT NULL DEFAULT ''"},
+		{"podcasts", "owner_name", "TEXT NOT NULL DEFAULT ''"},
+		{"episodes", "season", "INTEGER NOT NULL DEFAULT 0"},
+		{"episodes", "episode_number", "INTEGER NOT NULL DEFAULT 0"},
+		{"episodes", "episode_type", "TEXT NOT NULL DEFAULT ''"},
+		{"episodes", "explicit", "INTEGER NOT NULL DEFAULT 0"},
+		{"episodes", "author", "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, c := range added {
+		has, err := s.hasColumn(c.table, c.name)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := s.db.Exec(`ALTER TABLE ` + c.table + ` ADD COLUMN ` + c.name + ` ` + c.def); err != nil {
+			return fmt.Errorf("add column %s.%s: %w", c.table, c.name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) hasColumn(table, name string) (bool, error) {
+	rows, err := s.db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var cname, ctype string
+		var notnull, pk int
+		var dflt any
+		if err := rows.Scan(&cid, &cname, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if cname == name {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
+// categoriesToJSON / categoriesFromJSON store the category list in one TEXT column.
+func categoriesToJSON(cats []string) string {
+	if len(cats) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(cats)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func categoriesFromJSON(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(s), &out); err != nil || out == nil {
+		return []string{}
+	}
+	return out
 }
 
 const schema = `
@@ -81,6 +156,12 @@ CREATE TABLE IF NOT EXISTS podcasts (
   last_error TEXT NOT NULL DEFAULT '',
   etag TEXT NOT NULL DEFAULT '',
   last_modified TEXT NOT NULL DEFAULT '',
+  language TEXT NOT NULL DEFAULT '',
+  copyright TEXT NOT NULL DEFAULT '',
+  categories TEXT NOT NULL DEFAULT '',
+  explicit INTEGER NOT NULL DEFAULT 0,
+  podcast_type TEXT NOT NULL DEFAULT '',
+  owner_name TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -97,6 +178,11 @@ CREATE TABLE IF NOT EXISTS episodes (
   media_size INTEGER NOT NULL DEFAULT 0,
   duration_ms INTEGER NOT NULL DEFAULT 0,
   published_at TEXT NOT NULL DEFAULT '',
+  season INTEGER NOT NULL DEFAULT 0,
+  episode_number INTEGER NOT NULL DEFAULT 0,
+  episode_type TEXT NOT NULL DEFAULT '',
+  explicit INTEGER NOT NULL DEFAULT 0,
+  author TEXT NOT NULL DEFAULT '',
   position_ms INTEGER NOT NULL DEFAULT 0,
   played INTEGER NOT NULL DEFAULT 0,
   progress_updated_at TEXT NOT NULL DEFAULT '',

@@ -7,6 +7,7 @@ import '../../state/library.dart';
 import '../format.dart';
 import '../widgets/artwork.dart';
 import '../widgets/episode_tile.dart';
+import '../widgets/meta_row.dart';
 
 class PodcastDetailScreen extends ConsumerStatefulWidget {
   const PodcastDetailScreen({super.key, required this.podcastId});
@@ -185,6 +186,18 @@ class _PodcastDetailScreenState extends ConsumerState<PodcastDetailScreen> {
                                   avatar: Icon(Icons.lock_rounded, size: 14),
                                   label: Text('Premium'),
                                 ),
+                              if (p.podcastType == 'serial')
+                                const Chip(
+                                  visualDensity: VisualDensity.compact,
+                                  avatar: Icon(Icons.format_list_numbered_rounded, size: 14),
+                                  label: Text('Serie'),
+                                ),
+                              if (p.explicit)
+                                const Chip(
+                                  visualDensity: VisualDensity.compact,
+                                  avatar: Icon(Icons.explicit_rounded, size: 14),
+                                  label: Text('Explicit'),
+                                ),
                               if (p.lastError.isNotEmpty)
                                 Tooltip(
                                   message: p.lastError,
@@ -224,6 +237,8 @@ class _PodcastDetailScreenState extends ConsumerState<PodcastDetailScreen> {
                         context, () => ref.read(libraryProvider.notifier).updatePodcast(p.id, autoEnqueue: v)),
                   ),
                 ),
+                const SizedBox(height: 12),
+                _PodcastInfoCard(podcast: p),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -251,6 +266,54 @@ class _PodcastDetailScreenState extends ConsumerState<PodcastDetailScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Feed metadata: feed URL (tap = copy), website, language, categories, type,
+/// copyright, owner, refresh/subscription dates. Rows without data are omitted.
+class _PodcastInfoCard extends StatelessWidget {
+  const _PodcastInfoCard({required this.podcast});
+  final Podcast podcast;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = podcast;
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final rows = <Widget>[
+      MetaRow(label: 'Feed-URL', value: p.feedUrl, icon: Icons.rss_feed_rounded, copyable: true, mono: true),
+      if (p.website.isNotEmpty)
+        MetaRow(
+          label: 'Website',
+          value: p.website,
+          icon: Icons.language_rounded,
+          onTap: () => launchUrl(Uri.parse(p.website), mode: LaunchMode.externalApplication),
+        ),
+      if (p.language.isNotEmpty) MetaRow(label: 'Sprache', value: p.language, icon: Icons.translate_rounded),
+      if (p.categories.isNotEmpty) MetaChips(label: 'Kategorien', values: p.categories, icon: Icons.category_outlined),
+      if (podcastTypeLabel(p.podcastType).isNotEmpty)
+        MetaRow(label: 'Typ', value: podcastTypeLabel(p.podcastType), icon: Icons.view_agenda_outlined),
+      if (p.explicit) const MetaRow(label: 'Inhalt', value: 'Explicit', icon: Icons.explicit_rounded),
+      if (p.ownerName.isNotEmpty) MetaRow(label: 'Owner', value: p.ownerName, icon: Icons.person_outline_rounded),
+      if (p.copyright.isNotEmpty) MetaRow(label: 'Copyright', value: p.copyright, icon: Icons.copyright_rounded),
+      if (p.lastRefreshedAt != null)
+        MetaRow(label: 'Aktualisiert', value: formatDateTime(p.lastRefreshedAt), icon: Icons.sync_rounded),
+      if (p.createdAt != null)
+        MetaRow(label: 'Abonniert seit', value: formatDateTime(p.createdAt), icon: Icons.bookmark_added_outlined),
+    ];
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            child: Text('Info', style: text.titleSmall?.copyWith(color: scheme.onSurfaceVariant)),
+          ),
+          ...rows,
+          const SizedBox(height: 4),
+        ],
       ),
     );
   }

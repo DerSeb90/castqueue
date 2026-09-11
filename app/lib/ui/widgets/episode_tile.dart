@@ -123,6 +123,7 @@ class EpisodeTile extends ConsumerWidget {
     final downloaded = dl.has(e.id);
 
     final meta = <String>[
+      if (e.seasonEpisodeLabel.isNotEmpty) e.seasonEpisodeLabel,
       if (e.publishedAt != null) formatDate(e.publishedAt),
       if (e.played)
         'Gehört'

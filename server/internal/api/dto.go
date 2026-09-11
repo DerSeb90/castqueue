@@ -8,27 +8,39 @@ import (
 )
 
 type podcastDTO struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	FeedURL         string `json:"feed_url"`
-	Description     string `json:"description"`
-	Author          string `json:"author"`
-	ImageURL        string `json:"image_url"`
-	Website         string `json:"website"`
-	AutoEnqueue     bool   `json:"auto_enqueue"`
-	HasAuth         bool   `json:"has_auth"`
-	EpisodeCount    int    `json:"episode_count"`
-	LastRefreshedAt string `json:"last_refreshed_at"`
-	LastError       string `json:"last_error"`
-	CreatedAt       string `json:"created_at"`
-	UpdatedAt       string `json:"updated_at"`
+	ID              string   `json:"id"`
+	Title           string   `json:"title"`
+	FeedURL         string   `json:"feed_url"`
+	Description     string   `json:"description"`
+	Author          string   `json:"author"`
+	ImageURL        string   `json:"image_url"`
+	Website         string   `json:"website"`
+	AutoEnqueue     bool     `json:"auto_enqueue"`
+	HasAuth         bool     `json:"has_auth"`
+	EpisodeCount    int      `json:"episode_count"`
+	LastRefreshedAt string   `json:"last_refreshed_at"`
+	LastError       string   `json:"last_error"`
+	Language        string   `json:"language"`
+	Copyright       string   `json:"copyright"`
+	Categories      []string `json:"categories"`
+	Explicit        bool     `json:"explicit"`
+	PodcastType     string   `json:"podcast_type"`
+	OwnerName       string   `json:"owner_name"`
+	CreatedAt       string   `json:"created_at"`
+	UpdatedAt       string   `json:"updated_at"`
 }
 
 func toPodcastDTO(p store.Podcast) podcastDTO {
+	cats := p.Categories
+	if cats == nil {
+		cats = []string{}
+	}
 	return podcastDTO{
 		ID: p.ID, Title: p.Title, FeedURL: p.FeedURL, Description: p.Description, Author: p.Author,
 		ImageURL: p.ImageURL, Website: p.Website, AutoEnqueue: p.AutoEnqueue, HasAuth: p.HasAuth(),
 		EpisodeCount: p.EpisodeCount, LastRefreshedAt: fmtTime(p.LastRefreshedAt), LastError: p.LastError,
+		Language: p.Language, Copyright: p.Copyright, Categories: cats, Explicit: p.Explicit,
+		PodcastType: p.PodcastType, OwnerName: p.OwnerName,
 		CreatedAt: fmtTime(p.CreatedAt), UpdatedAt: fmtTime(p.UpdatedAt),
 	}
 }
@@ -57,6 +69,11 @@ type episodeDTO struct {
 	MediaSize         int64  `json:"media_size"`
 	DurationMs        int64  `json:"duration_ms"`
 	PublishedAt       string `json:"published_at"`
+	Season            int    `json:"season"`
+	EpisodeNumber     int    `json:"episode_number"`
+	EpisodeType       string `json:"episode_type"`
+	Explicit          bool   `json:"explicit"`
+	Author            string `json:"author"`
 	PositionMs        int64  `json:"position_ms"`
 	Played            bool   `json:"played"`
 	ProgressUpdatedAt string `json:"progress_updated_at"`
@@ -76,7 +93,9 @@ func (s *Server) toEpisodeDTO(e store.Episode, streamToken string) episodeDTO {
 		ID: e.ID, PodcastID: e.PodcastID, PodcastTitle: e.PodcastTitle, PodcastImageURL: e.PodcastImageURL,
 		GUID: e.GUID, Title: e.Title, Description: e.Description, Link: e.Link, ImageURL: e.ImageURL,
 		MediaURL: e.MediaURL, StreamURL: s.streamURL(e, streamToken), MediaType: e.MediaType, MediaSize: e.MediaSize,
-		DurationMs: e.DurationMs, PublishedAt: fmtTime(e.PublishedAt), PositionMs: e.PositionMs, Played: e.Played,
+		DurationMs: e.DurationMs, PublishedAt: fmtTime(e.PublishedAt),
+		Season: e.Season, EpisodeNumber: e.EpisodeNumber, EpisodeType: e.EpisodeType, Explicit: e.Explicit, Author: e.Author,
+		PositionMs: e.PositionMs, Played: e.Played,
 		ProgressUpdatedAt: fmtTime(e.ProgressUpdatedAt), InQueue: e.InQueue, UpdatedAt: fmtTime(e.UpdatedAt),
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mmcdole/gofeed"
+	ext "github.com/mmcdole/gofeed/extensions"
 
 	"github.com/sebseifert/castqueue/internal/store"
 )
@@ -96,6 +97,9 @@ func Parse(body []byte) (Result, error) {
 	p.Title = strings.TrimSpace(feed.Title)
 	p.Description = strings.TrimSpace(feed.Description)
 	p.Website = feed.Link
+	p.Language = strings.TrimSpace(feed.Language)
+	p.Copyright = strings.TrimSpace(feed.Copyright)
+	p.Categories = mergeCategories(feed.Categories, nil)
 	if feed.Image != nil {
 		p.ImageURL = feed.Image.URL
 	}
@@ -108,6 +112,12 @@ func Parse(body []byte) (Result, error) {
 		}
 		if p.Description == "" && feed.ITunesExt.Summary != "" {
 			p.Description = feed.ITunesExt.Summary
+		}
+		p.Categories = mergeCategories(feed.Categories, feed.ITunesExt.Categories)
+		p.Explicit = isExplicit(feed.ITunesExt.Explicit)
+		p.PodcastType = normalizePodcastType(feed.ITunesExt.Type)
+		if feed.ITunesExt.Owner != nil {
+			p.OwnerName = strings.TrimSpace(feed.ITunesExt.Owner.Name)
 		}
 	}
 	if p.Author == "" && len(feed.Authors) > 0 {
@@ -161,6 +171,14 @@ func toEpisode(it *gofeed.Item) (store.NewEpisode, bool) {
 		if e.Description == "" {
 			e.Description = it.ITunesExt.Summary
 		}
+		e.Season = parseSmallInt(it.ITunesExt.Season)
+		e.EpisodeNumber = parseSmallInt(it.ITunesExt.Episode)
+		e.EpisodeType = normalizeEpisodeType(it.ITunesExt.EpisodeType)
+		e.Explicit = isExplicit(it.ITunesExt.Explicit)
+		e.Author = strings.TrimSpace(it.ITunesExt.Author)
+	}
+	if e.Author == "" && len(it.Authors) > 0 && it.Authors[0] != nil {
+		e.Author = strings.TrimSpace(it.Authors[0].Name)
 	}
 	if it.PublishedParsed != nil {
 		e.PublishedAt = it.PublishedParsed.UTC()
@@ -171,6 +189,73 @@ func toEpisode(it *gofeed.Item) (store.NewEpisode, bool) {
 		e.MediaType = guessMime(e.MediaURL)
 	}
 	return e, true
+}
+
+// mergeCategories flattens plain RSS categories and iTunes categories (with
+// subcategories) into one de-duplicated list, preserving first-seen order.
+func mergeCategories(plain []string, itunes []*ext.ITunesCategory) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	add := func(c string) {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			return
+		}
+		key := strings.ToLower(c)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, c)
+	}
+	for _, c := range itunes {
+		for cur := c; cur != nil; cur = cur.Subcategory {
+			add(cur.Text)
+		}
+	}
+	for _, c := range plain {
+		add(c)
+	}
+	return out
+}
+
+func isExplicit(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "yes", "true", "explicit":
+		return true
+	}
+	return false
+}
+
+func normalizePodcastType(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "episodic":
+		return "episodic"
+	case "serial":
+		return "serial"
+	}
+	return ""
+}
+
+func normalizeEpisodeType(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "full":
+		return "full"
+	case "trailer":
+		return "trailer"
+	case "bonus":
+		return "bonus"
+	}
+	return ""
+}
+
+// parseSmallInt reads season/episode numbers; anything odd becomes 0.
+func parseSmallInt(s string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 0 || n > 1_000_000 {
+		return 0
+	}
+	return n
 }
 
 func guessMime(u string) string {
@@ -220,10 +305,16 @@ func parseDuration(s string) int64 {
 // ---- iTunes search ----
 
 type SearchResult struct {
-	Title    string `json:"title"`
-	Author   string `json:"author"`
-	FeedURL  string `json:"feed_url"`
-	ImageURL string `json:"image_url"`
+	Title           string   `json:"title"`
+	Author          string   `json:"author"`
+	FeedURL         string   `json:"feed_url"`
+	ImageURL        string   `json:"image_url"`
+	Genres          []string `json:"genres"`
+	EpisodeCount    int      `json:"episode_count"`
+	LatestReleaseAt string   `json:"latest_release_at"` // RFC3339 or ""
+	ITunesURL       string   `json:"itunes_url"`
+	Explicit        bool     `json:"explicit"`
+	Country         string   `json:"country"`
 }
 
 func (c *Client) Search(ctx context.Context, term string, limit int) ([]SearchResult, error) {
@@ -243,11 +334,17 @@ func (c *Client) Search(ctx context.Context, term string, limit int) ([]SearchRe
 	}
 	var payload struct {
 		Results []struct {
-			CollectionName string `json:"collectionName"`
-			ArtistName     string `json:"artistName"`
-			FeedURL        string `json:"feedUrl"`
-			ArtworkURL600  string `json:"artworkUrl600"`
-			ArtworkURL100  string `json:"artworkUrl100"`
+			CollectionName        string   `json:"collectionName"`
+			ArtistName            string   `json:"artistName"`
+			FeedURL               string   `json:"feedUrl"`
+			ArtworkURL600         string   `json:"artworkUrl600"`
+			ArtworkURL100         string   `json:"artworkUrl100"`
+			Genres                []string `json:"genres"`
+			TrackCount            int      `json:"trackCount"`
+			ReleaseDate           string   `json:"releaseDate"`
+			CollectionViewURL     string   `json:"collectionViewUrl"`
+			ContentAdvisoryRating string   `json:"contentAdvisoryRating"`
+			Country               string   `json:"country"`
 		} `json:"results"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 5<<20)).Decode(&payload); err != nil {
@@ -262,7 +359,23 @@ func (c *Client) Search(ctx context.Context, term string, limit int) ([]SearchRe
 		if img == "" {
 			img = r.ArtworkURL100
 		}
-		out = append(out, SearchResult{Title: r.CollectionName, Author: r.ArtistName, FeedURL: r.FeedURL, ImageURL: img})
+		genres := []string{}
+		for _, g := range r.Genres {
+			g = strings.TrimSpace(g)
+			if g != "" && !strings.EqualFold(g, "Podcasts") {
+				genres = append(genres, g)
+			}
+		}
+		release := ""
+		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(r.ReleaseDate)); err == nil {
+			release = t.UTC().Format(time.RFC3339)
+		}
+		out = append(out, SearchResult{
+			Title: r.CollectionName, Author: r.ArtistName, FeedURL: r.FeedURL, ImageURL: img,
+			Genres: genres, EpisodeCount: r.TrackCount, LatestReleaseAt: release,
+			ITunesURL: r.CollectionViewURL, Explicit: strings.EqualFold(r.ContentAdvisoryRating, "Explicit"),
+			Country: r.Country,
+		})
 	}
 	return out, nil
 }

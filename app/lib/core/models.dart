@@ -19,6 +19,8 @@ bool _bool(Object? v, [bool def = false]) => v is bool ? v : def;
 
 String _str(Object? v, [String def = '']) => v is String ? v : def;
 
+List<String> _strList(Object? v) => v is List ? [for (final e in v) if (e is String && e.isNotEmpty) e] : const [];
+
 class Podcast {
   const Podcast({
     required this.id,
@@ -33,6 +35,12 @@ class Podcast {
     this.episodeCount = 0,
     this.lastRefreshedAt,
     this.lastError = '',
+    this.language = '',
+    this.copyright = '',
+    this.categories = const [],
+    this.explicit = false,
+    this.podcastType = '',
+    this.ownerName = '',
     this.createdAt,
     this.updatedAt,
   });
@@ -49,6 +57,14 @@ class Podcast {
   final int episodeCount;
   final DateTime? lastRefreshedAt;
   final String lastError;
+  final String language;
+  final String copyright;
+  final List<String> categories;
+  final bool explicit;
+
+  /// "episodic", "serial" or "".
+  final String podcastType;
+  final String ownerName;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -65,6 +81,12 @@ class Podcast {
         episodeCount: _int(j['episode_count']),
         lastRefreshedAt: _dt(j['last_refreshed_at']),
         lastError: _str(j['last_error']),
+        language: _str(j['language']),
+        copyright: _str(j['copyright']),
+        categories: _strList(j['categories']),
+        explicit: _bool(j['explicit']),
+        podcastType: _str(j['podcast_type']),
+        ownerName: _str(j['owner_name']),
         createdAt: _dt(j['created_at']),
         updatedAt: _dt(j['updated_at']),
       );
@@ -82,6 +104,12 @@ class Podcast {
         'episode_count': episodeCount,
         'last_refreshed_at': _dts(lastRefreshedAt),
         'last_error': lastError,
+        'language': language,
+        'copyright': copyright,
+        'categories': categories,
+        'explicit': explicit,
+        'podcast_type': podcastType,
+        'owner_name': ownerName,
         'created_at': _dts(createdAt),
         'updated_at': _dts(updatedAt),
       };
@@ -99,6 +127,12 @@ class Podcast {
         episodeCount: episodeCount,
         lastRefreshedAt: lastRefreshedAt,
         lastError: lastError,
+        language: language,
+        copyright: copyright,
+        categories: categories,
+        explicit: explicit,
+        podcastType: podcastType,
+        ownerName: ownerName,
         createdAt: createdAt,
         updatedAt: updatedAt,
       );
@@ -121,6 +155,11 @@ class Episode {
     this.mediaSize = 0,
     this.durationMs = 0,
     this.publishedAt,
+    this.season = 0,
+    this.episodeNumber = 0,
+    this.episodeType = '',
+    this.explicit = false,
+    this.author = '',
     this.positionMs = 0,
     this.played = false,
     this.progressUpdatedAt,
@@ -143,6 +182,15 @@ class Episode {
   final int mediaSize;
   final int durationMs;
   final DateTime? publishedAt;
+
+  /// `<itunes:season>` / `<itunes:episode>`, 0 when absent.
+  final int season;
+  final int episodeNumber;
+
+  /// "full", "trailer", "bonus" or "".
+  final String episodeType;
+  final bool explicit;
+  final String author;
   final int positionMs;
   final bool played;
   final DateTime? progressUpdatedAt;
@@ -151,6 +199,14 @@ class Episode {
 
   /// Best artwork: episode image, else podcast image.
   String get artworkUrl => imageUrl.isNotEmpty ? imageUrl : podcastImageUrl;
+
+  /// "S2E14", "S2", "E14" or "" for list prefixes.
+  String get seasonEpisodeLabel {
+    if (season > 0 && episodeNumber > 0) return 'S${season}E$episodeNumber';
+    if (season > 0) return 'S$season';
+    if (episodeNumber > 0) return 'E$episodeNumber';
+    return '';
+  }
 
   Duration get duration => Duration(milliseconds: durationMs);
   Duration get position => Duration(milliseconds: positionMs);
@@ -178,6 +234,11 @@ class Episode {
         mediaSize: _int(j['media_size']),
         durationMs: _int(j['duration_ms']),
         publishedAt: _dt(j['published_at']),
+        season: _int(j['season']),
+        episodeNumber: _int(j['episode_number']),
+        episodeType: _str(j['episode_type']),
+        explicit: _bool(j['explicit']),
+        author: _str(j['author']),
         positionMs: _int(j['position_ms']),
         played: _bool(j['played']),
         progressUpdatedAt: _dt(j['progress_updated_at']),
@@ -201,6 +262,11 @@ class Episode {
         'media_size': mediaSize,
         'duration_ms': durationMs,
         'published_at': _dts(publishedAt),
+        'season': season,
+        'episode_number': episodeNumber,
+        'episode_type': episodeType,
+        'explicit': explicit,
+        'author': author,
         'position_ms': positionMs,
         'played': played,
         'progress_updated_at': _dts(progressUpdatedAt),
@@ -232,6 +298,11 @@ class Episode {
         mediaSize: mediaSize,
         durationMs: durationMs ?? this.durationMs,
         publishedAt: publishedAt,
+        season: season,
+        episodeNumber: episodeNumber,
+        episodeType: episodeType,
+        explicit: explicit,
+        author: author,
         positionMs: positionMs ?? this.positionMs,
         played: played ?? this.played,
         progressUpdatedAt: progressUpdatedAt ?? this.progressUpdatedAt,
@@ -339,17 +410,35 @@ class SearchResult {
     required this.author,
     required this.feedUrl,
     required this.imageUrl,
+    this.genres = const [],
+    this.episodeCount = 0,
+    this.latestReleaseAt,
+    this.itunesUrl = '',
+    this.explicit = false,
+    this.country = '',
   });
   final String title;
   final String author;
   final String feedUrl;
   final String imageUrl;
+  final List<String> genres;
+  final int episodeCount;
+  final DateTime? latestReleaseAt;
+  final String itunesUrl;
+  final bool explicit;
+  final String country;
 
   factory SearchResult.fromJson(Map<String, dynamic> j) => SearchResult(
         title: _str(j['title']),
         author: _str(j['author']),
         feedUrl: _str(j['feed_url']),
         imageUrl: _str(j['image_url']),
+        genres: _strList(j['genres']),
+        episodeCount: _int(j['episode_count']),
+        latestReleaseAt: _dt(j['latest_release_at']),
+        itunesUrl: _str(j['itunes_url']),
+        explicit: _bool(j['explicit']),
+        country: _str(j['country']),
       );
 }
 
