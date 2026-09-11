@@ -8,7 +8,9 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/castqueue ./cmd/castqueue
 
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 castqueue
+RUN apk add --no-cache ca-certificates tzdata \
+    && adduser -D -u 10001 castqueue \
+    && mkdir -p /data && chown castqueue:castqueue /data
 COPY --from=build /out/castqueue /usr/local/bin/castqueue
 VOLUME /data
 ENV CQ_DATA_DIR=/data CQ_LISTEN=:8080
