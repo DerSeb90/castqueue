@@ -474,8 +474,14 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
+	lock, err := s.store.GetPlaybackLock(r.Context())
+	if err != nil {
+		s.writeStoreError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"server_time":      fmtTime(d.ServerTime),
+		"playback":         toPlaybackDTO(lock),
 		"podcasts":         toPodcastDTOs(d.Podcasts),
 		"podcasts_deleted": d.PodcastsDeleted,
 		"episodes":         eps,

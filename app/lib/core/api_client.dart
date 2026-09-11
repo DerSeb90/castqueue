@@ -22,6 +22,13 @@ class UnauthorizedException extends ApiException {
 }
 
 /// `PUT /api/queue` version mismatch; carries the server's current queue.
+/// 409 from `/api/playback/heartbeat`: another device is playing.
+class PlaybackConflictException extends ApiException {
+  PlaybackConflictException(this.lock)
+      : super(409, 'Wiedergabe läuft auf „${lock.deviceName}“', code: 'playback_conflict');
+  final PlaybackLock lock;
+}
+
 class QueueConflictException extends ApiException {
   QueueConflictException(this.current) : super(409, 'Warteschlange wurde woanders geändert', code: 'conflict');
   final QueueState current;
@@ -86,6 +93,10 @@ class ApiClient {
     }
     if (res.statusCode == 401) {
       throw UnauthorizedException(_errorMessage(res) ?? 'Nicht angemeldet');
+    }
+    if (res.statusCode == 409 && path == '/api/playback/heartbeat') {
+      final j = _decode(res) as Map<String, dynamic>;
+      throw PlaybackConflictException(PlaybackLock.fromJson((j['playback'] as Map<String, dynamic>?) ?? const {}));
     }
     if (res.statusCode == 409 && path == '/api/queue') {
       throw QueueConflictException(QueueState.fromJson(_decode(res) as Map<String, dynamic>));
@@ -286,6 +297,18 @@ class ApiClient {
       QueueState.fromJson(await _send('DELETE', '/api/queue') as Map<String, dynamic>);
 
   // ---------------------------------------------------------------- sync
+
+  // ------------------------------------------------------------ playback lock
+
+  Future<PlaybackLock> playbackClaim(String episodeId, String target) async => PlaybackLock.fromJson(
+      await _send('POST', '/api/playback/claim', body: {'episode_id': episodeId, 'target': target}) as Map<String, dynamic>);
+
+  /// Throws [PlaybackConflictException] when another device holds the lock.
+  Future<PlaybackLock> playbackHeartbeat(String episodeId, String target) async => PlaybackLock.fromJson(
+      await _send('POST', '/api/playback/heartbeat', body: {'episode_id': episodeId, 'target': target})
+          as Map<String, dynamic>);
+
+  Future<void> playbackRelease() => _send('POST', '/api/playback/release');
 
   Future<SyncResponse> sync({DateTime? since}) async => SyncResponse.fromJson(await _send(
         'GET',

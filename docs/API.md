@@ -168,6 +168,22 @@ replace the whole order must send the version they based it on.
 
 ## Sync
 
+### Playback lock (one device at a time)
+Only one device may play at once. A device that starts playing **claims** the lock
+(always takes over), sends a **heartbeat** every ~10 s while playing and **releases** on
+pause/stop. A lock without heartbeat for 45 s is stale and can be taken by a heartbeat.
+Other devices learn about the lock via heartbeat 409 or the `playback` field in `/api/sync`
+and pause themselves.
+
+`PlaybackLock`: `{ "active": bool, "device_id", "device_name", "episode_id", "target", "started_at", "heartbeat_at", "stale": bool }`
+
+- `GET /api/playback` → `PlaybackLock`
+- `POST /api/playback/claim` `{ "episode_id", "target": "Lokal" | "Sonos Küche" }` → `PlaybackLock`
+- `POST /api/playback/heartbeat` `{ "episode_id", "target" }` → `PlaybackLock`, or **409**
+  `{ "code": "playback_conflict", "playback": PlaybackLock }` when another device holds a live lock
+- `POST /api/playback/release` → 204 (no-op when not the holder)
+
+### Sync
 - `GET /api/sync?since=<rfc3339>` → delta since `since` (omit → everything):
   ```json
   {
@@ -177,7 +193,8 @@ replace the whole order must send the version they based it on.
     "episodes": [Episode],          // created/updated (incl. progress) since
     "episodes_deleted": ["id"],
     "queue": { "version": 17, "episode_ids": ["…"] },
-    "settings": Settings
+    "settings": Settings,
+    "playback": PlaybackLock      // who is playing right now, see below
   }
   ```
   Clients persist `server_time` and pass it as `since` next time. Tombstones are

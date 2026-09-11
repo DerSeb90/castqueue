@@ -365,6 +365,41 @@ class Settings {
       };
 }
 
+/// Which device is playing right now (`playback` in sync, `/api/playback`).
+class PlaybackLock {
+  const PlaybackLock({
+    required this.active,
+    this.deviceId = '',
+    this.deviceName = '',
+    this.episodeId = '',
+    this.target = '',
+    this.startedAt,
+    this.heartbeatAt,
+    this.stale = false,
+  });
+  final bool active;
+  final String deviceId;
+  final String deviceName;
+  final String episodeId;
+  final String target;
+  final DateTime? startedAt;
+  final DateTime? heartbeatAt;
+  final bool stale;
+
+  bool get live => active && !stale;
+
+  factory PlaybackLock.fromJson(Map<String, dynamic> j) => PlaybackLock(
+        active: _bool(j['active']),
+        deviceId: _str(j['device_id']),
+        deviceName: _str(j['device_name']),
+        episodeId: _str(j['episode_id']),
+        target: _str(j['target']),
+        startedAt: _dt(j['started_at']),
+        heartbeatAt: _dt(j['heartbeat_at']),
+        stale: _bool(j['stale']),
+      );
+}
+
 class SyncResponse {
   const SyncResponse({
     required this.serverTime,
@@ -374,6 +409,7 @@ class SyncResponse {
     required this.episodesDeleted,
     required this.queue,
     required this.settings,
+    this.playback,
   });
   final DateTime serverTime;
   final List<Podcast> podcasts;
@@ -382,6 +418,7 @@ class SyncResponse {
   final List<String> episodesDeleted;
   final QueueIds queue;
   final Settings settings;
+  final PlaybackLock? playback;
 
   factory SyncResponse.fromJson(Map<String, dynamic> j) => SyncResponse(
         serverTime: _dt(j['server_time']) ?? DateTime.now().toUtc(),
@@ -401,6 +438,7 @@ class SyncResponse {
         ],
         queue: QueueIds.fromJson((j['queue'] as Map<String, dynamic>?) ?? const {}),
         settings: Settings.fromJson((j['settings'] as Map<String, dynamic>?) ?? const {}),
+        playback: j['playback'] is Map<String, dynamic> ? PlaybackLock.fromJson(j['playback'] as Map<String, dynamic>) : null,
       );
 }
 

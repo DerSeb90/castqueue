@@ -51,6 +51,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.listen(playbackControllerProvider.select((s) => s.error), (prev, next) {
       if (next != null && next != prev) showSnack(context, next, error: true);
     });
+    ref.listen(playbackControllerProvider.select((s) => s.notice), (prev, next) {
+      if (next != null && next != prev) {
+        showSnack(context, next);
+        ref.read(playbackControllerProvider.notifier).clearNotice();
+      }
+    });
 
     final wide = MediaQuery.sizeOf(context).width >= 800;
     if (!wide && _index > 3) _index = 3;

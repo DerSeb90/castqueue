@@ -93,6 +93,11 @@ func (s *Server) routes() {
 	m.HandleFunc("DELETE /api/queue/items/{id}", auth(s.handleQueueRemove))
 	m.HandleFunc("POST /api/queue/move", auth(s.handleQueueMove))
 
+	m.HandleFunc("GET /api/playback", auth(s.handleGetPlayback))
+	m.HandleFunc("POST /api/playback/claim", auth(s.handlePlaybackClaim))
+	m.HandleFunc("POST /api/playback/heartbeat", auth(s.handlePlaybackHeartbeat))
+	m.HandleFunc("POST /api/playback/release", auth(s.handlePlaybackRelease))
+
 	m.HandleFunc("GET /api/sync", auth(s.handleSync))
 	m.HandleFunc("GET /api/settings", auth(s.handleGetSettings))
 	m.HandleFunc("PUT /api/settings", auth(s.handleSetSettings))

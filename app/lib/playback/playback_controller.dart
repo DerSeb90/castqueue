@@ -25,6 +25,7 @@ class PlaybackUiState {
     this.sonosDevices = const [],
     this.discovering = false,
     this.error,
+    this.notice,
   });
 
   final Episode? episode;
@@ -38,6 +39,9 @@ class PlaybackUiState {
   final List<SonosDevice> sonosDevices;
   final bool discovering;
   final String? error;
+
+  /// Non-error information for the user (e.g. playback taken over elsewhere).
+  final String? notice;
 
   bool get hasItem => episode != null && status.state != PlaybackState.idle;
   bool get isPlaying => status.state == PlaybackState.playing || status.state == PlaybackState.loading;
@@ -65,8 +69,11 @@ class PlaybackUiState {
     bool? discovering,
     String? error,
     bool clearError = false,
+    String? notice,
+    bool clearNotice = false,
   }) =>
       PlaybackUiState(
+        notice: clearNotice ? null : (notice ?? this.notice),
         episode: clearEpisode ? null : (episode ?? this.episode),
         status: status ?? this.status,
         targetId: targetId ?? this.targetId,
@@ -98,9 +105,13 @@ class PlaybackController extends Notifier<PlaybackUiState> {
     _target = _local;
     _subscribe();
     _progressTimer = Timer.periodic(_reportEvery, (_) {
-      if (state.isPlaying) unawaited(_report());
+      if (state.isPlaying) {
+        unawaited(_report());
+        unawaited(_heartbeat());
+      }
     });
     ref.listen(libraryProvider.select((s) => s.queueIds), (_, _) => unawaited(_updateNextHint()));
+    ref.listen(libraryProvider.select((s) => s.playback), (_, lock) => unawaited(_onServerLock(lock)));
     ref.onDispose(() {
       _progressTimer?.cancel();
       _sub?.cancel();
@@ -198,6 +209,7 @@ class PlaybackController extends Notifier<PlaybackUiState> {
     try {
       await _target.load(_itemFor(fresh, _target), startAt: Duration(milliseconds: startMs));
       if (_target.supportsSpeed) await _target.setSpeed(state.speed);
+      unawaited(_claim());
       unawaited(_updateNextHint());
     } catch (e) {
       state = state.copyWith(error: 'Wiedergabe fehlgeschlagen: $e');
@@ -225,15 +237,18 @@ class PlaybackController extends Notifier<PlaybackUiState> {
   Future<void> play() async {
     if (!state.hasItem) return togglePlay();
     await _target.play();
+    unawaited(_claim());
   }
 
   Future<void> pause() async {
     await _target.pause();
     await _report();
+    unawaited(_release());
   }
 
   Future<void> stop({bool report = true}) async {
     if (report && state.hasItem) await _report();
+    unawaited(_release());
     _completedFor = null;
     try {
       await _target.stop();
@@ -319,17 +334,88 @@ class PlaybackController extends Notifier<PlaybackUiState> {
     final pos = position ?? state.position;
     final dur = (state.status.duration ?? Duration.zero) > Duration.zero ? state.status.duration! : ep.duration;
     try {
-      await _lib.reportProgress(ProgressUpdate(
-        episodeId: ep.id,
-        positionMs: pos.inMilliseconds,
-        durationMs: dur > Duration.zero ? dur.inMilliseconds : null,
-        played: played,
-        updatedAt: DateTime.now().toUtc(),
-      ));
+      await _lib.reportProgress(
+        ProgressUpdate(
+          episodeId: ep.id,
+          positionMs: pos.inMilliseconds,
+          durationMs: dur > Duration.zero ? dur.inMilliseconds : null,
+          played: played,
+          updatedAt: DateTime.now().toUtc(),
+        ),
+        // Offline the flush would block pause/seek until the timeout; the
+        // update is persisted locally and retried by the sync service.
+        flush: false,
+      );
+      unawaited(_lib.flushPendingProgress().catchError((_) {}));
     } on UnauthorizedException {
       // handled by sync service
     } catch (_) {}
   }
+
+  // ------------------------------------------------------ exclusive playback
+  //
+  // Only one device may play at a time. Starting playback claims the server
+  // lock (taking over from any other device); while playing we heartbeat
+  // every [_reportEvery]. A 409 on heartbeat, or a live lock of another
+  // device arriving via sync, pauses this device.
+
+  DateTime? _lastClaimAt;
+
+  String get _myDeviceId => ref.read(sessionProvider)?.deviceId ?? '';
+
+  Future<void> _claim() async {
+    final ep = state.episode;
+    final api = ref.read(apiClientProvider);
+    if (ep == null || api == null) return;
+    _lastClaimAt = DateTime.now().toUtc();
+    try {
+      await api.playbackClaim(ep.id, state.targetName);
+    } catch (_) {
+      // offline: play anyway, the next heartbeat claims
+    }
+  }
+
+  Future<void> _heartbeat() async {
+    final ep = state.episode;
+    final api = ref.read(apiClientProvider);
+    if (ep == null || api == null || !state.isPlaying) return;
+    try {
+      await api.playbackHeartbeat(ep.id, state.targetName);
+    } on PlaybackConflictException catch (e) {
+      await _takenOver(e.lock);
+    } catch (_) {}
+  }
+
+  Future<void> _release() async {
+    final api = ref.read(apiClientProvider);
+    if (api == null) return;
+    try {
+      await api.playbackRelease();
+    } catch (_) {}
+  }
+
+  Future<void> _onServerLock(PlaybackLock? lock) async {
+    if (lock == null || !lock.live || !state.isPlaying) return;
+    if (lock.deviceId.isEmpty || lock.deviceId == _myDeviceId) return;
+    // A sync that was in flight while we claimed may still carry the old holder.
+    final claimed = _lastClaimAt;
+    if (claimed != null && lock.heartbeatAt != null && lock.heartbeatAt!.isBefore(claimed)) return;
+    await _takenOver(lock);
+  }
+
+  Future<void> _takenOver(PlaybackLock lock) async {
+    if (!state.isPlaying) return;
+    try {
+      await _target.pause();
+    } catch (_) {}
+    await _report();
+    final where = lock.target.isNotEmpty && lock.target != lock.deviceName
+        ? '${lock.deviceName} (${lock.target})'
+        : lock.deviceName;
+    state = state.copyWith(notice: 'Wiedergabe läuft jetzt auf „$where“ – hier pausiert.');
+  }
+
+  void clearNotice() => state = state.copyWith(clearNotice: true);
 
   /// App going to background / closing.
   Future<void> onAppPaused() async {

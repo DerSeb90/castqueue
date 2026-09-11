@@ -20,6 +20,7 @@ class LibraryState {
     this.refreshing = false,
     this.lastError,
     this.initialSyncDone = false,
+    this.playback,
   });
 
   final Map<String, Podcast> podcasts;
@@ -33,6 +34,9 @@ class LibraryState {
   final bool refreshing;
   final String? lastError;
   final bool initialSyncDone;
+
+  /// Server-side playback lock as of the last sync.
+  final PlaybackLock? playback;
 
   List<Episode> get queue => [for (final id in queueIds) if (episodes[id] != null) episodes[id]!];
 
@@ -75,8 +79,10 @@ class LibraryState {
     String? lastError,
     bool clearError = false,
     bool? initialSyncDone,
+    PlaybackLock? playback,
   }) =>
       LibraryState(
+        playback: playback ?? this.playback,
         podcasts: podcasts ?? this.podcasts,
         episodes: episodes ?? this.episodes,
         queueIds: queueIds ?? this.queueIds,
@@ -166,6 +172,7 @@ class LibraryNotifier extends Notifier<LibraryState> {
       lastSync: r.serverTime,
       initialSyncDone: true,
       clearError: true,
+      playback: r.playback ?? const PlaybackLock(active: false),
     );
     _persist();
   }
@@ -266,7 +273,7 @@ class LibraryNotifier extends Notifier<LibraryState> {
 
   /// Optimistic local update + best-effort network push. Failures stay in
   /// [LibraryState.pendingProgress] and are flushed by the sync service.
-  Future<void> reportProgress(ProgressUpdate u) async {
+  Future<void> reportProgress(ProgressUpdate u, {bool flush = true}) async {
     final episodes = Map<String, Episode>.of(state.episodes);
     final existing = episodes[u.episodeId];
     if (existing != null) {
@@ -289,7 +296,7 @@ class LibraryNotifier extends Notifier<LibraryState> {
       pendingProgress: {...state.pendingProgress, u.episodeId: u},
     );
     _persist();
-    await flushPendingProgress();
+    if (flush) await flushPendingProgress();
   }
 
   Future<void> flushPendingProgress() async {
