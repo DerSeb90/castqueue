@@ -120,5 +120,9 @@ abstract class PlaybackTarget {
   /// pre-queue may ignore it. Pass `null` to clear.
   Future<void> setNext(PlayItem? item);
 
+  /// Re-read the real state now (app came back to the foreground). Targets
+  /// that push their own state may ignore it.
+  Future<void> refresh();
+
   Future<void> dispose();
 }

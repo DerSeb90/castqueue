@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_update.dart';
+import '../../core/diagnostics.dart';
 import '../../core/sync_service.dart';
 import '../../downloads/download_manager.dart';
 import '../../ipod/rockbox_device.dart';
@@ -23,6 +24,40 @@ const _kRepoUrl = 'https://github.com/$kUpdateRepository';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
+
+  Future<void> _showDiagnostics(BuildContext context) => showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Diagnose'),
+          content: SizedBox(
+            width: 520,
+            child: ListenableBuilder(
+              listenable: Diagnostics.instance,
+              builder: (_, _) {
+                final lines = Diagnostics.instance.lines;
+                if (lines.isEmpty) return const Text('Noch keine Einträge.');
+                return SingleChildScrollView(
+                  child: SelectableText(
+                    lines.join('\n'),
+                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: Diagnostics.instance.lines.join('\n')));
+                showSnack(ctx, 'Kopiert');
+              },
+              child: const Text('Kopieren'),
+            ),
+            TextButton(onPressed: Diagnostics.instance.clear, child: const Text('Leeren')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Schließen')),
+          ],
+        ),
+      );
 
   Future<void> _logout(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
@@ -338,6 +373,12 @@ class SettingsScreen extends ConsumerWidget {
                           ? 'Lädt die neue APK direkt von GitHub'
                           : 'Öffnet das neueste Release auf GitHub'),
                   onTap: () => _checkForUpdates(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.bug_report_outlined),
+                  title: const Text('Diagnose'),
+                  subtitle: const Text('Protokoll für Mediensteuerung und Sonos'),
+                  onTap: () => _showDiagnostics(context),
                 ),
                 ListTile(
                   leading: const Icon(Icons.code_rounded),

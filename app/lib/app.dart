@@ -42,6 +42,7 @@ class _CastQueueAppState extends ConsumerState<CastQueueApp> with WidgetsBinding
     switch (state) {
       case AppLifecycleState.resumed:
         if (ref.read(sessionProvider) != null) sync.start();
+        ref.read(playbackControllerProvider.notifier).onAppResumed();
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:

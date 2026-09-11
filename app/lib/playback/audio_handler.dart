@@ -1,6 +1,7 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/diagnostics.dart';
 import 'playback_controller.dart';
 import 'playback_target.dart' as pt;
 
@@ -13,6 +14,7 @@ class CastQueueAudioHandler extends BaseAudioHandler with SeekHandler {
 
   final ProviderContainer _container;
   String? _lastItemId;
+  bool? _lastPlaying;
 
   PlaybackController get _ctl => _container.read(playbackControllerProvider.notifier);
 
@@ -43,6 +45,10 @@ class CastQueueAudioHandler extends BaseAudioHandler with SeekHandler {
       ));
     }
     final playing = s.status.state == pt.PlaybackState.playing;
+    if (playing != _lastPlaying) {
+      _lastPlaying = playing;
+      Diagnostics.log('media session: playing=$playing item=${ep.id} target=${s.targetId}');
+    }
     playbackState.add(playbackState.value.copyWith(
       controls: [
         MediaControl.rewind,
@@ -67,10 +73,16 @@ class CastQueueAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 
   @override
-  Future<void> play() => _ctl.play();
+  Future<void> play() {
+    Diagnostics.log('media button: play');
+    return _ctl.play();
+  }
 
   @override
-  Future<void> pause() => _ctl.pause();
+  Future<void> pause() {
+    Diagnostics.log('media button: pause');
+    return _ctl.pause();
+  }
 
   @override
   Future<void> stop() => _ctl.stop();

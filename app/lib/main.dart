@@ -7,6 +7,7 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'core/diagnostics.dart';
 import 'core/local_store.dart';
 import 'playback/audio_handler.dart';
 import 'state/app_state.dart';
@@ -35,16 +36,24 @@ Future<void> main() async {
   container.read(libraryProvider);
 
   if (Platform.isAndroid) {
-    await AudioService.init(
-      builder: () => CastQueueAudioHandler(container),
-      config: const AudioServiceConfig(
-        androidNotificationChannelId: 'de.seifert.castqueue.audio',
-        androidNotificationChannelName: 'Wiedergabe',
-        androidNotificationOngoing: true,
-        androidStopForegroundOnPause: true,
-        androidNotificationIcon: 'drawable/ic_launcher_monochrome',
-      ),
-    );
+    AudioService.asyncError.listen((e) => Diagnostics.log('audio_service: $e'));
+    try {
+      await AudioService.init(
+        builder: () => CastQueueAudioHandler(container),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'de.seifert.castqueue.audio',
+          androidNotificationChannelName: 'Wiedergabe',
+          androidNotificationOngoing: true,
+          androidStopForegroundOnPause: true,
+          androidNotificationIcon: 'drawable/ic_launcher_monochrome',
+        ),
+      );
+      Diagnostics.log('audio_service: init ok');
+    } catch (e) {
+      // Without the media session the app still works, just without
+      // notification / lockscreen controls.
+      Diagnostics.log('audio_service: init failed: $e');
+    }
   }
 
   runApp(UncontrolledProviderScope(container: container, child: const CastQueueApp()));

@@ -123,6 +123,7 @@ class PlaybackController extends Notifier<PlaybackUiState> {
   Timer? _progressTimer;
   Timer? _sleepTimer;
   bool _sleepExpiring = false;
+  bool _inBackground = false;
   bool _handlingCompletion = false;
   String? _completedFor;
   static const _reportEvery = Duration(seconds: 10);
@@ -180,7 +181,10 @@ class PlaybackController extends Notifier<PlaybackUiState> {
         unawaited(_updateNextHint());
       }
     }
-    state = state.copyWith(status: s, error: s.error, clearError: s.error == null);
+    // Errors that happen while the phone sleeps (Doze cuts our network) are
+    // stale by the time the user looks at the screen; onAppResumed re-polls.
+    final err = _inBackground ? null : s.error;
+    state = state.copyWith(status: s, error: err, clearError: err == null);
     if (s.state == PlaybackState.completed && ep != null && _completedFor != ep.id) {
       _completedFor = ep.id;
       unawaited(_onCompleted(ep));
@@ -535,8 +539,19 @@ class PlaybackController extends Notifier<PlaybackUiState> {
 
   /// App going to background / closing.
   Future<void> onAppPaused() async {
+    _inBackground = true;
     if (state.hasItem) await _report();
     await _lib.persistNow();
+  }
+
+  /// App visible again: drop stale errors, re-read the target's real state.
+  Future<void> onAppResumed() async {
+    _inBackground = false;
+    if (state.error != null) state = state.copyWith(clearError: true);
+    if (!state.hasItem) return;
+    try {
+      await _target.refresh();
+    } catch (_) {}
   }
 
   // ------------------------------------------------------------- targets

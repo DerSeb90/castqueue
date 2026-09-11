@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
+import '../core/diagnostics.dart';
 import '../playback/playback_target.dart';
 import 'didl.dart';
 import 'soap.dart';
@@ -195,6 +196,17 @@ class SonosTarget implements PlaybackTarget {
     }
   }
 
+  /// Foreground again: forget failures from the sleep phase and poll now so
+  /// the UI shows the speaker's real state immediately.
+  @override
+  Future<void> refresh() async {
+    if (_disposed || _current == null) return;
+    _pollFailures = 0;
+    _cancelTimer();
+    if (_status.error != null) _emit(_status.copyWith());
+    await _pollOnce();
+  }
+
   @override
   Future<void> dispose() async {
     _disposed = true;
@@ -279,6 +291,7 @@ class SonosTarget implements PlaybackTarget {
       // Transient network error: keep the last status, poll again later.
       // Only after several failures in a row tell the user.
       _pollFailures++;
+      if (_pollFailures <= _pollFailureGrace) Diagnostics.log('sonos poll #$_pollFailures failed: $e');
       final active = _status.state == PlaybackState.playing || _status.state == PlaybackState.loading;
       if (active && _pollFailures == _pollFailureGrace) {
         _emit(_status.copyWith(error: 'Sonos „${device.roomName}“ antwortet nicht: $e'));

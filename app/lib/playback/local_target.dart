@@ -151,6 +151,9 @@ class LocalTarget implements PlaybackTarget {
   PlayItem? get nextHint => _next;
 
   @override
+  Future<void> refresh() async => _emit();
+
+  @override
   Future<void> dispose() async {
     await _controller.close();
     await _player.dispose();

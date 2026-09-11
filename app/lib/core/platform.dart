@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import 'diagnostics.dart';
+
 /// Small platform hooks implemented in `MainActivity.kt`.
 class AppPlatform {
   static const _channel = MethodChannel('de.seifert.castqueue/platform');
@@ -12,10 +14,14 @@ class AppPlatform {
   static Future<bool> requestNotificationPermission() async {
     if (!Platform.isAndroid) return true;
     try {
-      return await _channel.invokeMethod<bool>('requestNotificationPermission') ?? false;
-    } on PlatformException {
+      final ok = await _channel.invokeMethod<bool>('requestNotificationPermission') ?? false;
+      Diagnostics.log('notification permission: ${ok ? 'granted' : 'denied'}');
+      return ok;
+    } on PlatformException catch (e) {
+      Diagnostics.log('notification permission: error $e');
       return false;
     } on MissingPluginException {
+      Diagnostics.log('notification permission: channel missing');
       return false;
     }
   }
