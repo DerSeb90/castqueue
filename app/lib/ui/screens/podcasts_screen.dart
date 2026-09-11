@@ -50,8 +50,11 @@ class PodcastsScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                   Text('Noch keine Abos', textAlign: TextAlign.center, style: text.titleLarge),
                   const SizedBox(height: 6),
-                  Text('Füge einen Podcast per Suche oder Feed-URL hinzu.',
-                      textAlign: TextAlign.center, style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                  Text(
+                    'Füge einen Podcast per Suche oder Feed-URL hinzu.',
+                    textAlign: TextAlign.center,
+                    style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
                 ],
               )
             : LayoutBuilder(
@@ -63,60 +66,75 @@ class PodcastsScreen extends ConsumerWidget {
                       crossAxisCount: cols,
                       mainAxisSpacing: 14,
                       crossAxisSpacing: 14,
-                      childAspectRatio: 0.78,
+                      childAspectRatio: 0.72,
                     ),
                     itemCount: podcasts.length,
                     itemBuilder: (context, i) {
                       final p = podcasts[i];
                       return InkWell(
                         borderRadius: BorderRadius.circular(16),
-                        onTap: () => Navigator.of(context)
-                            .push(MaterialPageRoute<void>(builder: (_) => PodcastDetailScreen(podcastId: p.id))),
+                        onTap: () =>
+                            Navigator.of(context)
+                                .push(MaterialPageRoute<void>(builder: (_) => PodcastDetailScreen(podcastId: p.id))),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Stack(
-                              children: [
-                                Artwork(url: p.imageUrl, size: null, radius: 16),
-                                if (p.hasAuth)
-                                  Positioned(
-                                    right: 8,
-                                    top: 8,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(5),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black.withValues(alpha: 0.55),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Icon(Icons.lock_rounded, size: 14, color: scheme.primary),
-                                    ),
-                                  ),
-                                if (p.lastError.isNotEmpty)
-                                  Positioned(
-                                    left: 8,
-                                    top: 8,
-                                    child: Tooltip(
-                                      message: p.lastError,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(5),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withValues(alpha: 0.55),
-                                          borderRadius: BorderRadius.circular(8),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: AspectRatio(
+                                  aspectRatio: 1,
+                                  child: Stack(
+                                    children: [
+                                      Artwork(url: p.imageUrl, size: null, radius: 16),
+                                      if (p.hasAuth)
+                                        Positioned(
+                                          right: 8,
+                                          top: 8,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(5),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.55),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Icon(Icons.lock_rounded, size: 14, color: scheme.primary),
+                                          ),
                                         ),
-                                        child: Icon(Icons.error_outline_rounded, size: 14, color: scheme.error),
-                                      ),
-                                    ),
+                                      if (p.lastError.isNotEmpty)
+                                        Positioned(
+                                          left: 8,
+                                          top: 8,
+                                          child: Tooltip(
+                                            message: p.lastError,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withValues(alpha: 0.55),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Icon(Icons.error_outline_rounded, size: 14, color: scheme.error),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
-                              ],
+                                ),
+                              ),
                             ),
                             const SizedBox(height: 8),
-                            Text(p.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600, height: 1.2)),
+                            Text(
+                              p.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w600, height: 1.2),
+                            ),
                             const SizedBox(height: 2),
-                            Text('${p.episodeCount} Folgen',
-                                maxLines: 1, style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                            Text(
+                              '${p.episodeCount} Folgen',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                            ),
                           ],
                         ),
                       );
