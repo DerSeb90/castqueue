@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 const kAccent = Color(0xFFF5A524);
 
 ThemeData buildDarkTheme() {
-  const surface = Color(0xFF0E0E10);
-  const surfaceHigh = Color(0xFF1A1A1E);
+  // Dark grey rather than pitch black: the scaffold sits at ~9 % luminance so
+  // cards, inputs and menus still have room to step up from it, and the
+  // navigation is the only surface that goes darker than the page.
+  const surface = Color(0xFF16161A);
   final scheme = ColorScheme.fromSeed(
     seedColor: kAccent,
     brightness: Brightness.dark,
@@ -13,13 +15,15 @@ ThemeData buildDarkTheme() {
     onPrimary: const Color(0xFF1B1200),
     secondary: const Color(0xFFFFC66D),
     surface: surface,
-    onSurface: const Color(0xFFECECEE),
-    surfaceContainerLowest: const Color(0xFF09090B),
-    surfaceContainerLow: const Color(0xFF131316),
-    surfaceContainer: surfaceHigh,
-    surfaceContainerHigh: const Color(0xFF212126),
-    surfaceContainerHighest: const Color(0xFF2A2A30),
-    outlineVariant: const Color(0xFF2E2E34),
+    onSurface: const Color(0xFFF1F0EE),
+    onSurfaceVariant: const Color(0xFFB4B1AC),
+    surfaceContainerLowest: const Color(0xFF101013), // navigation rail / bar
+    surfaceContainerLow: const Color(0xFF1F1F24), // cards, dialogs, sheets
+    surfaceContainer: const Color(0xFF27272D), // inputs, mini player, chips
+    surfaceContainerHigh: const Color(0xFF303037), // menus, artwork placeholder
+    surfaceContainerHighest: const Color(0xFF3B3B43), // snackbar, inactive tracks
+    outline: const Color(0xFF5C5C66),
+    outlineVariant: const Color(0xFF3C3C45),
     error: const Color(0xFFFF6B6B),
   );
   return _base(scheme).copyWith(
@@ -29,13 +33,28 @@ ThemeData buildDarkTheme() {
 }
 
 ThemeData buildLightTheme() {
+  // Explicit neutrals: the amber seed alone tints every container peach, which
+  // makes plain cards look like warning panels.
+  const surface = Color(0xFFF7F5F0);
   final scheme = ColorScheme.fromSeed(
     seedColor: kAccent,
     brightness: Brightness.light,
     primary: const Color(0xFFB86E00),
-    surface: const Color(0xFFFAF8F4),
+    surface: surface,
+    onSurface: const Color(0xFF1C1B18),
+    onSurfaceVariant: const Color(0xFF5E5951),
+    surfaceContainerLowest: const Color(0xFFFFFFFF), // navigation rail / bar
+    surfaceContainerLow: const Color(0xFFFFFFFF), // cards, dialogs, sheets
+    surfaceContainer: const Color(0xFFEFECE6), // inputs, mini player, chips
+    surfaceContainerHigh: const Color(0xFFE7E3DC), // menus, artwork placeholder
+    surfaceContainerHighest: const Color(0xFFDDD8CF), // snackbar, inactive tracks
+    outline: const Color(0xFF8A847A),
+    outlineVariant: const Color(0xFFDCD6CC),
   );
-  return _base(scheme);
+  return _base(scheme).copyWith(
+    scaffoldBackgroundColor: surface,
+    canvasColor: surface,
+  );
 }
 
 ThemeData _base(ColorScheme scheme) {
@@ -70,7 +89,7 @@ ThemeData _base(ColorScheme scheme) {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: isDark ? 0.6 : 1)),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: isDark ? 0.8 : 1)),
       ),
     ),
     listTileTheme: ListTileThemeData(

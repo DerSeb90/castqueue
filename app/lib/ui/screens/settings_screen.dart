@@ -229,27 +229,36 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ]),
               section('Wiedergabe', [
+                // Slider and segmented button get their own full-width row:
+                // as ListTile trailings they squeezed the title on phones.
                 ListTile(
                   leading: const Icon(Icons.speed_rounded),
                   title: const Text('Standard-Geschwindigkeit'),
-                  subtitle: Text('${prefs.defaultSpeed.toStringAsFixed(2)}×'),
-                  trailing: SizedBox(
-                    width: 180,
-                    child: Slider(
-                      value: prefs.defaultSpeed.clamp(0.8, 2.0),
-                      min: 0.8,
-                      max: 2.0,
-                      divisions: 12,
-                      label: '${prefs.defaultSpeed.toStringAsFixed(1)}×',
-                      onChanged: (v) => ref.read(playbackControllerProvider.notifier).setSpeed((v * 10).round() / 10),
-                    ),
+                  trailing: Text(
+                    '${prefs.defaultSpeed.toStringAsFixed(1)}×',
+                    style: text.titleSmall?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
                   ),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.dark_mode_rounded),
-                  title: const Text('Design'),
-                  trailing: SegmentedButton<ThemeMode>(
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                  child: Slider(
+                    value: prefs.defaultSpeed.clamp(0.8, 2.0),
+                    min: 0.8,
+                    max: 2.0,
+                    divisions: 12,
+                    label: '${prefs.defaultSpeed.toStringAsFixed(1)}×',
+                    onChanged: (v) => ref.read(playbackControllerProvider.notifier).setSpeed((v * 10).round() / 10),
+                  ),
+                ),
+                const ListTile(
+                  leading: Icon(Icons.dark_mode_rounded),
+                  title: Text('Design'),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: SegmentedButton<ThemeMode>(
                     showSelectedIcon: false,
+                    expandedInsets: EdgeInsets.zero,
                     segments: const [
                       ButtonSegment(value: ThemeMode.dark, label: Text('Dunkel')),
                       ButtonSegment(value: ThemeMode.light, label: Text('Hell')),

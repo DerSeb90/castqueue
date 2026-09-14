@@ -1,12 +1,14 @@
 :root {
-  --bg: #0b0c10;
-  --bg-2: #14161c;
-  --bg-3: #1d2028;
-  --bg-4: #272a34;
-  --border: #2c303b;
-  --fg: #e8e9ee;
-  --fg-2: #a6aab5;
-  --fg-3: #6f7380;
+  /* Same steps as the app's dark theme: grey, not black, so cards and inputs
+     still lift off the page. */
+  --bg: #16171c;
+  --bg-2: #1f2027;
+  --bg-3: #282a32;
+  --bg-4: #33363f;
+  --border: #383b46;
+  --fg: #f0f0f3;
+  --fg-2: #b0b3bd;
+  --fg-3: #858896;
   --accent: #f59e0b;
   --accent-2: #fbbf24;
   --accent-dim: rgba(245, 158, 11, .15);
@@ -43,7 +45,7 @@ img { display: block; }
 .spacer { flex: 1; }
 
 .btn { border: 1px solid var(--border); background: var(--bg-3); border-radius: 10px; padding: 8px 14px; cursor: pointer; transition: background .15s, border-color .15s; white-space: nowrap; }
-.btn:hover { background: var(--bg-4); border-color: #3a3f4c; }
+.btn:hover { background: var(--bg-4); border-color: #4a4e5c; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 600; }
 .btn.primary:hover { background: var(--accent-2); }
 .btn.danger { color: var(--danger); }
@@ -97,7 +99,7 @@ label.inline input { width: auto; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; }
 .pod-card { cursor: pointer; }
 .pod-card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; background: var(--bg-3); border: 1px solid var(--border); transition: transform .15s; }
-.pod-card:hover img { transform: translateY(-3px); border-color: #3a3f4c; }
+.pod-card:hover img { transform: translateY(-3px); border-color: #4a4e5c; }
 .pod-card .t { margin-top: 8px; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pod-card .s { font-size: 12px; color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pod-card .err { color: var(--danger); }
@@ -122,7 +124,7 @@ th { color: var(--fg-3); font-weight: 500; font-size: 13px; }
 .toast.err { border-color: var(--danger); }
 
 /* login */
-.login { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at top, #1a1c24, var(--bg) 60%); }
+.login { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at top, #23252e, var(--bg) 60%); }
 .login-card { width: 360px; display: flex; flex-direction: column; gap: 14px; padding: 32px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
 
 .switch { position: relative; width: 42px; height: 24px; flex: none; }
